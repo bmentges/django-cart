@@ -65,7 +65,7 @@ This project was abandoned and I got it and added tests and South migrations, an
 Right now the main problem is that it adds a database record for each cart it creates. I'm in the process of studying this and will soon implement something to handle it.
 
 
-## A note to the authors of this project
+## A note on the authors of this project
 
 This project is a fork of [django-cart](http://code.google.com/p/django-cart/ "django-cart") on Google Code. It was originally started by Eric Woudenberg and followed up by Marc Garcia <http://vaig.be>. The last change ocurred in March 25 2009, without any tests. My goal is to push this project a little further by adding tests to guarantee it's functionality and to fix the main issues. I intend to keep it as simple as it is.
 
