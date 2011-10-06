@@ -32,7 +32,7 @@ def get_cart(request):
     return render_to_response('cart.html', dict(cart=Cart(request)))
 ```
 
-```python
+```django
 # templates/cart.html
 {% extends 'base.html' %}
 
