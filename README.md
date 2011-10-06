@@ -2,7 +2,7 @@
 
 django-cart is a very simple application that just let you add and remove items from a session based cart. django-cart uses the power of the Django content type framework to enable you to have your own Product model and associate with the cart without having to change anything. Please refer to the tests to see how it's done.
 
-# Prerequisites
+## Prerequisites
 
 - Django 1.1+
 - django content type framework in your INSTALLED_APPS
@@ -11,7 +11,7 @@ django-cart is a very simple application that just let you add and remove items 
 
 Add 'cart' to your installed apps
 
-# Usage
+## Usage
 
 A basic usage of django-cart could be (example):
 
@@ -56,11 +56,11 @@ def get_cart(request):
 {% endblock %}
 ```
 
-# Some Info
+## Some Info
 
 This project was abandoned and I got it and added tests and South migrations, and I will be maintaining it from now on. 
 
-# Known Problems
+## Known Problems
 
 Right now the main problem is that it adds a database record for each cart it creates. I'm in the process of studying this and will soon implement something to handle it.
 
