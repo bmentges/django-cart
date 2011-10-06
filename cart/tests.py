@@ -32,6 +32,9 @@ class CartAndItemModelsTestCase(TestCase):
         return item
 
     def _create_user_in_database(self):
+        """
+            Helper function so I don't repeat myself
+        """ 
         user = User(username="user_for_sell", password="sold", 
                 email="example@example.com")
         user.save() 
