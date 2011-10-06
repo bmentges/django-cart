@@ -7,7 +7,7 @@ django-cart is a very simple application that just let you add and remove items 
 - Django 1.1+
 - django content type framework in your INSTALLED_APPS
 
-# Installation
+## Installation
 
 Add 'cart' to your installed apps
 
