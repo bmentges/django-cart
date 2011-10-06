@@ -13,8 +13,8 @@ Usage:
 
 A basic usage of django-cart could be (example):
 
-views.py
-`
+```python
+# views.py
 from cart import Cart
 from myproducts.models import Product
 
@@ -30,11 +30,10 @@ def remove_from_cart(request, product_id):
 
 def get_cart(request):
     return render_to_response('cart.html', dict(cart=Cart(request)))
-`
+```
 
-templates/cart.html
-
-`
+```python
+# templates/cart.html
 {% extends 'base.html' %}
 
 {% block body %}
@@ -53,7 +52,7 @@ templates/cart.html
         {% endfor %}
     </table>
 {% endblock %}
-`
+```
 
 Info:
 
