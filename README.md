@@ -9,7 +9,13 @@ django-cart is a very simple application that just let you add and remove items 
 
 ## Installation
 
-Add 'cart' to your installed apps
+To install this just type:
+
+```
+python setup.py install
+```
+
+After installing it, just add 'cart' to your installed apps and you're good to go.
 
 ## Usage
 
