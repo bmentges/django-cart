@@ -1,3 +1,5 @@
 .DS_Store
 *.pyc
 build
+dist
+django_cart.egg-info

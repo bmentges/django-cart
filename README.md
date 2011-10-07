@@ -6,6 +6,7 @@ django-cart is a very simple application that just let you add and remove items 
 
 - Django 1.1+
 - django content type framework in your INSTALLED_APPS
+- south for migrations (optional)
 
 ## Installation
 
@@ -15,7 +16,17 @@ To install this just type:
 python setup.py install
 ```
 
-After installing it, just add 'cart' to your installed apps and you're good to go.
+or
+
+```
+pip install django-cart
+```
+
+After installation is complete:
+
+1. add 'cart' to your INSTALLED_APPS directive and
+2. If you have South migrations type: `./manage.py migrate cart`
+3. or if you don't: `./manage.py syncdb`
 
 ## Usage
 
