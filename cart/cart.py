@@ -68,6 +68,6 @@ class Cart:
             raise ItemDoesNotExist
 
     def clear(self):
-        for item in self.cart.item_set:
+        for item in self.cart.item_set.all():
             item.delete()
 
