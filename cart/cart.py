@@ -74,6 +74,12 @@ class Cart:
         for item in self.cart.item_set.all():
             result += 1 * item.quantity
         return result
+        
+    def summary(self):
+        result = 0
+        for item in self.cart.item_set.all():
+            result += item.total_price
+        return result
 
     def clear(self):
         for item in self.cart.item_set.all():
