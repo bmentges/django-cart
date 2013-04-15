@@ -55,6 +55,9 @@ class Cart(models.Model):
     creation_date = models.DateTimeField(verbose_name=_('creation date'))
     checked_out = models.BooleanField(default=False, verbose_name=_('checked out'))
 
+    def items(self):
+        return list(self.item_set.all())
+
     def add_item(self, item, unit_price=0, quantity=1):
         try:
             item = Item.objects.get(cart=self, product=item, unit_price=unit_price)

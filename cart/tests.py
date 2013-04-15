@@ -160,6 +160,21 @@ class CartRemoveItemTests(TestCase):
         self.assertRaises(ProductDoesNotExist, self.cart.remove_item, item)
 
 
+class CarItemsTests(TestCase):
+
+    def setUp(self):
+        self.cart = Cart.objects.create(creation_date=timezone.now())
+        
+    def test_empty_items(self):
+        self.assertEqual(self.cart.items(), [])
+
+    def test_items(self):
+        item = User.objects.create_user(username='test-user', password='')
+        self.cart.add_item(item)
+
+        self.assertEqual(self.cart.items(), list(Item.objects.all()))
+
+
 class CartMiddlewareTests(TestCase):
     SESSION_CART_ID = 'CART-ID'
 
