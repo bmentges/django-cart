@@ -1,8 +1,13 @@
 from django.test import TestCase
+from django.test.client import RequestFactory
+from django.utils import timezone
 from models import Cart, Item
 from django.contrib.auth.models import User
 import datetime
 from decimal import Decimal
+
+import middleware
+
 
 class CartAndItemModelsTestCase(TestCase):
 
@@ -108,3 +113,36 @@ class CartAndItemModelsTestCase(TestCase):
         item = self._create_item_in_database(cart, product=user, quantity=3, unit_price=Decimal("100"))
 
         self.assertEquals(item.__unicode__(), "3 units of User")
+
+
+class CartMiddlewareTests(TestCase):
+
+    def setUp(self):
+        self.request = RequestFactory().get('')
+        self.request.session = {}
+
+        self.cart_middleware = middleware.CartMiddleware()
+
+    def test_no_cart_in_session(self):
+        request = self.cart_middleware.process_request(self.request)
+
+        assert hasattr(self.request, 'cart')
+        self.assertEqual(self.request.cart, Cart.objects.get(id=1))
+        self.assertEqual(request.session['CART-ID'], 1)
+
+    def test_cart_in_session(self):
+        Cart.objects.create(creation_date=timezone.now())
+        self.request.session['CART-ID'] = 1
+
+        request = self.cart_middleware.process_request(self.request)
+
+        self.assertEqual(request.cart.id, 1)
+        self.assertEqual(request.session['CART-ID'], 1)
+
+    def test_invalid_cart_in_session(self):
+        self.request.session['CART-ID'] = 2
+
+        request = self.cart_middleware.process_request(self.request)
+
+        self.assertEqual(request.cart.id, 1)
+        self.assertEqual(request.session['CART-ID'], 1)
