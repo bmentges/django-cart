@@ -45,6 +45,12 @@ class Item(models.Model):
     product = property(get_product, set_product)
 
 
+class ProductDoesNotExist(Exception):
+
+    def __init__(self, product):
+        self.product = product
+
+
 class Cart(models.Model):
     creation_date = models.DateTimeField(verbose_name=_('creation date'))
     checked_out = models.BooleanField(default=False, verbose_name=_('checked out'))
@@ -56,6 +62,12 @@ class Cart(models.Model):
             item.save()
         except Item.DoesNotExist:
             item = Item.objects.create(cart=self, product=item, unit_price=unit_price, quantity=quantity)
+
+    def remove_item(self, item):
+        try:
+            Item.objects.get(cart=self, product=item).delete()
+        except Item.DoesNotExist:
+            raise ProductDoesNotExist(item)
 
     class Meta:
         verbose_name = _('cart')

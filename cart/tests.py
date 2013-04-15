@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.test.client import RequestFactory
 from django.utils import timezone
-from models import Cart, Item
+from models import Cart, Item, ProductDoesNotExist
 from django.contrib.auth.models import User
 import datetime
 from decimal import Decimal
@@ -115,19 +115,19 @@ class CartAndItemModelsTestCase(TestCase):
         self.assertEquals(item.__unicode__(), "3 units of User")
 
 
-class CartTests(TestCase):
+class CartAddItemTests(TestCase):
 
     def setUp(self):
         self.cart = Cart.objects.create(creation_date=timezone.now())
 
-    def test_add_item_with_nonexistent_item(self):
+    def test_with_nonexistent_item(self):
         item = User.objects.create_user(username='test-user', password='')
 
         self.assertEqual(Item.objects.count(), 0)
         self.cart.add_item(item)
         self.assertEqual(self.cart.item_set.count(), 1)
 
-    def test_add_item_with_existing_item_adds_to_quantity(self):
+    def test_with_existing_item_adds_to_quantity(self):
         item = User.objects.create_user(username='test-user', password='')
 
         self.assertEqual(Item.objects.count(), 0)
@@ -135,6 +135,29 @@ class CartTests(TestCase):
         self.cart.add_item(item, quantity=1)
         self.assertEqual(self.cart.item_set.count(), 1)
         self.assertEqual(self.cart.item_set.all()[0].quantity, 2)
+
+
+class CartRemoveItemTests(TestCase):
+
+    def setUp(self):
+        self.cart = Cart.objects.create(creation_date=timezone.now())
+
+    def test_remove_item_that_exists(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.cart.add_item(item)
+        self.assertEqual(Item.objects.count(), 1)
+
+        self.cart.remove_item(item)
+        self.assertEqual(self.cart.item_set.count(), 0)
+        self.assertEqual(Item.objects.count(), 0)
+
+    def test_remove_item_that_does_not_exist_raises_ProductDoesNotExist(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.assertEqual(Item.objects.count(), 0)
+
+        self.assertRaises(ProductDoesNotExist, self.cart.remove_item, item)
 
 
 class CartMiddlewareTests(TestCase):
