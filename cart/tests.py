@@ -115,7 +115,30 @@ class CartAndItemModelsTestCase(TestCase):
         self.assertEquals(item.__unicode__(), "3 units of User")
 
 
+class CartTests(TestCase):
+
+    def setUp(self):
+        self.cart = Cart.objects.create(creation_date=timezone.now())
+
+    def test_add_item_with_nonexistent_item(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.assertEqual(Item.objects.count(), 0)
+        self.cart.add_item(item)
+        self.assertEqual(self.cart.item_set.count(), 1)
+
+    def test_add_item_with_existing_item_adds_to_quantity(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.assertEqual(Item.objects.count(), 0)
+        self.cart.add_item(item, quantity=1)
+        self.cart.add_item(item, quantity=1)
+        self.assertEqual(self.cart.item_set.count(), 1)
+        self.assertEqual(self.cart.item_set.all()[0].quantity, 2)
+
+
 class CartMiddlewareTests(TestCase):
+    SESSION_CART_ID = 'CART-ID'
 
     def setUp(self):
         self.request = RequestFactory().get('')
@@ -128,21 +151,21 @@ class CartMiddlewareTests(TestCase):
 
         assert hasattr(self.request, 'cart')
         self.assertEqual(self.request.cart, Cart.objects.get(id=1))
-        self.assertEqual(request.session['CART-ID'], 1)
+        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
 
     def test_cart_in_session(self):
         Cart.objects.create(creation_date=timezone.now())
-        self.request.session['CART-ID'] = 1
+        self.request.session[CartMiddlewareTests.SESSION_CART_ID] = 1
 
         request = self.cart_middleware.process_request(self.request)
 
         self.assertEqual(request.cart.id, 1)
-        self.assertEqual(request.session['CART-ID'], 1)
+        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
 
     def test_invalid_cart_in_session(self):
-        self.request.session['CART-ID'] = 2
+        self.request.session[CartMiddlewareTests.SESSION_CART_ID] = 2
 
         request = self.cart_middleware.process_request(self.request)
 
         self.assertEqual(request.cart.id, 1)
-        self.assertEqual(request.session['CART-ID'], 1)
+        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
