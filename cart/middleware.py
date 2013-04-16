@@ -10,7 +10,7 @@ class CartMiddleware(object):
     def process_request(self, request):
         try:
             cart_id = request.session[CART_ID]
-            request.cart = models.Cart.objects.get(id=cart_id)
+            request.cart = models.Cart.objects.get(pk=cart_id)
         except (KeyError, models.Cart.DoesNotExist):
             request.cart = models.Cart.objects.create(creation_date=timezone.now())
-            request.session[CART_ID] = request.cart.id
+            request.session[CART_ID] = request.cart.pk
