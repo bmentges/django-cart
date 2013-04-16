@@ -7,7 +7,6 @@ from django.contrib.auth.models import User
 import datetime
 from decimal import Decimal
 
-import context_processors
 import middleware
 
 
@@ -263,24 +262,3 @@ class CartMiddlewareTests(TestCase):
 
         self.assertEqual(self.request.cart.id, 1)
         self.assertEqual(self.request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
-
-
-class CartContextProcessorTests(TestCase):
-
-    def test_add_cart_from_request(self):
-        request = RequestFactory().get('')
-        request.cart = 'dummy cart'
-
-        context = context_processors.cart(request)
-
-        assert 'cart' in context
-        self.assertEqual(context['cart'], 'dummy cart')
-
-    def test_add_cart_without_request(self):
-        self.assertRaisesRegexp(
-            ImproperlyConfigured,
-            'cart.context_processors.CartContextProcessor requires that the \
-CartMiddleware be installed',
-            context_processors.cart,
-            None
-        )
