@@ -160,7 +160,7 @@ class CartRemoveItemTests(TestCase):
         self.assertRaises(ProductDoesNotExist, self.cart.remove_item, item)
 
 
-class CarItemsTests(TestCase):
+class CartItemsTests(TestCase):
 
     def setUp(self):
         self.cart = Cart.objects.create(creation_date=timezone.now())
@@ -173,6 +173,29 @@ class CarItemsTests(TestCase):
         self.cart.add_item(item)
 
         self.assertEqual(self.cart.items(), list(Item.objects.all()))
+
+
+class CartSummaryTests(TestCase):
+
+    def setUp(self):
+        self.cart = Cart.objects.create(creation_date=timezone.now())
+
+    def test_zero(self):
+        self.assertEqual(self.cart.summary(), 0)
+
+    def test_summary(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.cart.add_item(item, unit_price=100)
+
+        self.assertEqual(self.cart.summary(), 100)
+
+    def test_summary_with_quantity(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.cart.add_item(item, unit_price=100, quantity=3)
+
+        self.assertEqual(self.cart.summary(), 300)
 
 
 class CartMiddlewareTests(TestCase):

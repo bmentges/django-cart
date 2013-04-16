@@ -72,6 +72,9 @@ class Cart(models.Model):
         except Item.DoesNotExist:
             raise ProductDoesNotExist(item)
 
+    def summary(self):
+        return sum(item.total_price for item in self.items())
+
     class Meta:
         verbose_name = _('cart')
         verbose_name_plural = _('carts')
