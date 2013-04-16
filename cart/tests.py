@@ -119,20 +119,21 @@ class CartAddItemTests(TestCase):
 
     def setUp(self):
         self.cart = Cart.objects.create(creation_date=timezone.now())
+        self.item = User.objects.create_user(username='test-user', password='')
 
     def test_with_nonexistent_item(self):
-        item = User.objects.create_user(username='test-user', password='')
-
         self.assertEqual(Item.objects.count(), 0)
-        self.cart.add_item(item)
+
+        self.cart.add_item(self.item)
+
         self.assertEqual(self.cart.item_set.count(), 1)
 
     def test_with_existing_item_adds_to_quantity(self):
-        item = User.objects.create_user(username='test-user', password='')
-
         self.assertEqual(Item.objects.count(), 0)
-        self.cart.add_item(item, quantity=1)
-        self.cart.add_item(item, quantity=1)
+
+        self.cart.add_item(self.item, quantity=1)
+        self.cart.add_item(self.item, quantity=1)
+
         self.assertEqual(self.cart.item_set.count(), 1)
         self.assertEqual(self.cart.item_set.all()[0].quantity, 2)
 
@@ -141,23 +142,20 @@ class CartRemoveItemTests(TestCase):
 
     def setUp(self):
         self.cart = Cart.objects.create(creation_date=timezone.now())
+        self.item = User.objects.create_user(username='test-user', password='')
 
     def test_remove_item_that_exists(self):
-        item = User.objects.create_user(username='test-user', password='')
-
-        self.cart.add_item(item)
+        self.cart.add_item(self.item)
         self.assertEqual(Item.objects.count(), 1)
 
-        self.cart.remove_item(item)
+        self.cart.remove_item(self.item)
         self.assertEqual(self.cart.item_set.count(), 0)
         self.assertEqual(Item.objects.count(), 0)
 
     def test_remove_item_that_does_not_exist_raises_ProductDoesNotExist(self):
-        item = User.objects.create_user(username='test-user', password='')
-
         self.assertEqual(Item.objects.count(), 0)
 
-        self.assertRaises(ProductDoesNotExist, self.cart.remove_item, item)
+        self.assertRaises(ProductDoesNotExist, self.cart.remove_item, self.item)
 
 
 class CartItemsTests(TestCase):
@@ -179,21 +177,18 @@ class CartSummaryTests(TestCase):
 
     def setUp(self):
         self.cart = Cart.objects.create(creation_date=timezone.now())
+        self.item = User.objects.create_user(username='test-user', password='')
 
     def test_zero(self):
         self.assertEqual(self.cart.summary(), 0)
 
     def test_summary(self):
-        item = User.objects.create_user(username='test-user', password='')
-
-        self.cart.add_item(item, unit_price=100)
+        self.cart.add_item(self.item, unit_price=100)
 
         self.assertEqual(self.cart.summary(), 100)
 
     def test_summary_with_quantity(self):
-        item = User.objects.create_user(username='test-user', password='')
-
-        self.cart.add_item(item, unit_price=100, quantity=3)
+        self.cart.add_item(self.item, unit_price=100, quantity=3)
 
         self.assertEqual(self.cart.summary(), 300)
 
