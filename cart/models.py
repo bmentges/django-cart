@@ -37,7 +37,7 @@ class Item(models.Model):
 
     # product
     def get_product(self):
-        return self.content_type.get_object_for_this_type(id=self.object_id)
+        return self.content_type.get_object_for_this_type(pk=self.object_id)
 
     def set_product(self, product):
         self.content_type = ContentType.objects.get_for_model(type(product))
