@@ -55,6 +55,13 @@ class Cart(models.Model):
     creation_date = models.DateTimeField(verbose_name=_('creation date'))
     checked_out = models.BooleanField(default=False, verbose_name=_('checked out'))
 
+    def is_empty(self):
+        return len(self.items()) == 0
+
+    def empty(self):
+        for item in self.items():
+            item.delete()
+
     def items(self):
         return list(self.item_set.all())
 

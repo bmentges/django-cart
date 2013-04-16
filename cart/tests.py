@@ -198,6 +198,25 @@ class CartSummaryTests(TestCase):
         self.assertEqual(self.cart.summary(), 300)
 
 
+class CartEmptyTests(TestCase):
+
+    def setUp(self):
+        self.cart = Cart.objects.create(creation_date=timezone.now())
+
+    def test_already_empty(self):
+        self.cart.empty()
+        self.assertTrue(self.cart.is_empty())
+
+    def test_empty(self):
+        item = User.objects.create_user(username='test-user', password='')
+
+        self.cart.add_item(item)
+        self.assertFalse(self.cart.is_empty())
+
+        self.cart.empty()
+        self.assertTrue(self.cart.is_empty())
+
+
 class CartMiddlewareTests(TestCase):
     SESSION_CART_ID = 'CART-ID'
 
