@@ -56,7 +56,7 @@ class Cart(models.Model):
     checked_out = models.BooleanField(default=False, verbose_name=_('checked out'))
 
     def is_empty(self):
-        return len(self.items()) == 0
+        return self.item_count() == 0
 
     def empty(self):
         for item in self.items():
@@ -64,6 +64,9 @@ class Cart(models.Model):
 
     def items(self):
         return list(self.item_set.all())
+
+    def item_count(self):
+        return len(self.items())
 
     def add_item(self, item, unit_price=0, quantity=1):
         try:
