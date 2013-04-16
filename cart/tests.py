@@ -239,25 +239,25 @@ class CartMiddlewareTests(TestCase):
         self.cart_middleware = middleware.CartMiddleware()
 
     def test_no_cart_in_session(self):
-        request = self.cart_middleware.process_request(self.request)
+        self.cart_middleware.process_request(self.request)
 
         assert hasattr(self.request, 'cart')
         self.assertEqual(self.request.cart, Cart.objects.get(id=1))
-        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
+        self.assertEqual(self.request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
 
     def test_cart_in_session(self):
         Cart.objects.create(creation_date=timezone.now())
         self.request.session[CartMiddlewareTests.SESSION_CART_ID] = 1
 
-        request = self.cart_middleware.process_request(self.request)
+        self.cart_middleware.process_request(self.request)
 
-        self.assertEqual(request.cart.id, 1)
-        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
+        self.assertEqual(self.request.cart.id, 1)
+        self.assertEqual(self.request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
 
     def test_invalid_cart_in_session(self):
         self.request.session[CartMiddlewareTests.SESSION_CART_ID] = 2
 
-        request = self.cart_middleware.process_request(self.request)
+        self.cart_middleware.process_request(self.request)
 
-        self.assertEqual(request.cart.id, 1)
-        self.assertEqual(request.session[CartMiddlewareTests.SESSION_CART_ID], 1)
+        self.assertEqual(self.request.cart.id, 1)
+        self.assertEqual(self.request.session[CartMiddlewareTests.SESSION_CART_ID], 1)

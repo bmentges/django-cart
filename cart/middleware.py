@@ -14,5 +14,3 @@ class CartMiddleware(object):
         except (KeyError, models.Cart.DoesNotExist):
             request.cart = models.Cart.objects.create(creation_date=timezone.now())
             request.session[CART_ID] = request.cart.id
-            
-        return request
