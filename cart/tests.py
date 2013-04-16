@@ -11,7 +11,7 @@ import middleware
 
 class CartAndItemModelsTestCase(TestCase):
 
-    def _create_cart_in_database(self, creation_date=datetime.datetime.now(), 
+    def _create_cart_in_database(self, creation_date=timezone.now(), 
             checked_out=False):
         """
             Helper function so I don't repeat myself
@@ -46,7 +46,7 @@ class CartAndItemModelsTestCase(TestCase):
         return user
 
     def test_cart_creation(self):
-        creation_date = datetime.datetime.now()
+        creation_date = timezone.now()
         cart = self._create_cart_in_database(creation_date)
         id = cart.id
 

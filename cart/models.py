@@ -12,6 +12,7 @@ class ItemManager(models.Manager):
             del(kwargs['product'])
         return super(ItemManager, self).get(*args, **kwargs)
 
+
 class Item(models.Model):
     cart = models.ForeignKey('Cart', verbose_name=_('cart'))
     quantity = models.PositiveIntegerField(verbose_name=_('quantity'))
