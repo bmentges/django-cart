@@ -1,4 +1,3 @@
-import datetime
 import models
 
 CART_ID = 'CART-ID'
@@ -26,7 +25,7 @@ class Cart:
             yield item
 
     def new(self, request):
-        cart = models.Cart(creation_date=datetime.datetime.now())
+        cart = models.Cart()
         cart.save()
         request.session[CART_ID] = cart.id
         return cart
@@ -66,6 +65,10 @@ class Cart:
                 cart=self.cart,
                 product=product,
             )
+            item.quantity = int(quantity)
+            if unit_price is not None:
+                item.unit_price = unit_price
+            item.save()
         except models.Item.DoesNotExist:
             raise ItemDoesNotExist
             
