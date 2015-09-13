@@ -1,17 +1,25 @@
-from django.test import TestCase
+from cart import models
+from django.test import TestCase, RequestFactory, Client
 from models import Cart, Item
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, AnonymousUser
 import datetime
 from decimal import Decimal
+from cart import Cart
 
 class CartAndItemModelsTestCase(TestCase):
 
-    def _create_cart_in_database(self, creation_date=datetime.datetime.now(), 
+    def setUp(self):
+        self.client = Client()
+        self.request = RequestFactory()
+        self.request.user = AnonymousUser()
+        self.request.session = {}
+
+    def _create_cart_in_database(self, creation_date=datetime.datetime.now(),
             checked_out=False):
         """
             Helper function so I don't repeat myself
         """
-        cart = Cart()
+        cart = models.Cart()
         cart.creation_date = creation_date
         cart.checked_out = False
         cart.save()
@@ -45,7 +53,7 @@ class CartAndItemModelsTestCase(TestCase):
         cart = self._create_cart_in_database(creation_date)
         id = cart.id
 
-        cart_from_database = Cart.objects.get(pk=id)
+        cart_from_database = models.Cart.objects.get(pk=id)
         self.assertEquals(cart, cart_from_database)
         
 
@@ -100,6 +108,15 @@ class CartAndItemModelsTestCase(TestCase):
         item_with_unit_price_as_decimal = self._create_item_in_database(cart,
                 product=user, quantity=4, unit_price=Decimal("3.20"))
         self.assertEquals(item_with_unit_price_as_decimal.total_price, Decimal("12.80"))
+
+    def test_update_cart(self):
+        user = self._create_user_in_database()
+        cart = Cart(self.request)
+        cart.new(self.request)
+        cart.add(product=user, quantity=3, unit_price=100)
+        cart.update(product=user, quantity=2, unit_price=200)
+        self.assertEquals(cart.summary(), 400)
+        self.assertEquals(cart.count(), 2)
 
     def test_item_unicode(self):
         user = self._create_user_in_database()
