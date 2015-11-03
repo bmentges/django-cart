@@ -1,65 +1,43 @@
-# encoding: utf-8
-import datetime
-from south.db import db
-from south.v2 import SchemaMigration
-from django.db import models
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 
-class Migration(SchemaMigration):
-
-    def forwards(self, orm):
-        
-        # Adding model 'Cart'
-        db.create_table('cart_cart', (
-            ('id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('creation_date', self.gf('django.db.models.fields.DateTimeField')()),
-            ('checked_out', self.gf('django.db.models.fields.BooleanField')(default=False)),
-        ))
-        db.send_create_signal('cart', ['Cart'])
-
-        # Adding model 'Item'
-        db.create_table('cart_item', (
-            ('id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('cart', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['cart.Cart'])),
-            ('quantity', self.gf('django.db.models.fields.PositiveIntegerField')()),
-            ('unit_price', self.gf('django.db.models.fields.DecimalField')(max_digits=18, decimal_places=2)),
-            ('content_type', self.gf('django.db.models.fields.related.ForeignKey')(to=orm['contenttypes.ContentType'])),
-            ('object_id', self.gf('django.db.models.fields.PositiveIntegerField')()),
-        ))
-        db.send_create_signal('cart', ['Item'])
+from django.db import models, migrations
 
 
-    def backwards(self, orm):
-        
-        # Deleting model 'Cart'
-        db.delete_table('cart_cart')
+class Migration(migrations.Migration):
 
-        # Deleting model 'Item'
-        db.delete_table('cart_item')
+    dependencies = [
+        ('contenttypes', '0002_remove_content_type_name'),
+    ]
 
-
-    models = {
-        'cart.cart': {
-            'Meta': {'ordering': "('-creation_date',)", 'object_name': 'Cart'},
-            'checked_out': ('django.db.models.fields.BooleanField', [], {'default': 'False'}),
-            'creation_date': ('django.db.models.fields.DateTimeField', [], {}),
-            'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'})
-        },
-        'cart.item': {
-            'Meta': {'ordering': "('cart',)", 'object_name': 'Item'},
-            'cart': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['cart.Cart']"}),
-            'content_type': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['contenttypes.ContentType']"}),
-            'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
-            'object_id': ('django.db.models.fields.PositiveIntegerField', [], {}),
-            'quantity': ('django.db.models.fields.PositiveIntegerField', [], {}),
-            'unit_price': ('django.db.models.fields.DecimalField', [], {'max_digits': '18', 'decimal_places': '2'})
-        },
-        'contenttypes.contenttype': {
-            'Meta': {'ordering': "('name',)", 'unique_together': "(('app_label', 'model'),)", 'object_name': 'ContentType', 'db_table': "'django_content_type'"},
-            'app_label': ('django.db.models.fields.CharField', [], {'max_length': '100'}),
-            'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
-            'model': ('django.db.models.fields.CharField', [], {'max_length': '100'}),
-            'name': ('django.db.models.fields.CharField', [], {'max_length': '100'})
-        }
-    }
-
-    complete_apps = ['cart']
+    operations = [
+        migrations.CreateModel(
+            name='Cart',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('creation_date', models.DateTimeField(verbose_name='creation date')),
+                ('checked_out', models.BooleanField(default=False, verbose_name='checked out')),
+            ],
+            options={
+                'ordering': ('-creation_date',),
+                'verbose_name': 'cart',
+                'verbose_name_plural': 'carts',
+            },
+        ),
+        migrations.CreateModel(
+            name='Item',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('quantity', models.PositiveIntegerField(verbose_name='quantity')),
+                ('unit_price', models.DecimalField(verbose_name='unit price', max_digits=18, decimal_places=2)),
+                ('object_id', models.PositiveIntegerField()),
+                ('cart', models.ForeignKey(verbose_name='cart', to='cart.Cart')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType')),
+            ],
+            options={
+                'ordering': ('cart',),
+                'verbose_name': 'item',
+                'verbose_name_plural': 'items',
+            },
+        ),
+    ]
