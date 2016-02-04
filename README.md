@@ -26,7 +26,7 @@ After installation is complete:
 
 1. add 'cart' to your INSTALLED_APPS directive and
 2. If you have South migrations type: `./manage.py migrate cart`
-3. or if you don't: `./manage.py syncdb`
+3. or if you don't: `./manage.py makemigrations cart`
 
 ## Usage
 
