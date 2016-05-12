@@ -34,7 +34,7 @@ A basic usage of django-cart could be (example):
 
 ```python
 # views.py
-from cart import Cart
+from cart.cart import Cart
 from myproducts.models import Product
 
 def add_to_cart(request, product_id, quantity):
