@@ -4,3 +4,4 @@ build
 dist
 django_cart.egg-info
 .idea
+*~
