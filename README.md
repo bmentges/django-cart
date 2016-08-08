@@ -26,7 +26,7 @@ After installation is complete:
 
 1. add 'cart' to your INSTALLED_APPS directive and
 2. If you have South migrations type: `./manage.py migrate cart`
-3. or if you don't: `./manage.py syncdb`
+3. or if you don't: `./manage.py makemigrations cart`
 
 ## Usage
 
@@ -34,7 +34,7 @@ A basic usage of django-cart could be (example):
 
 ```python
 # views.py
-from cart import Cart
+from cart.cart import Cart
 from myproducts.models import Product
 
 def add_to_cart(request, product_id, quantity):

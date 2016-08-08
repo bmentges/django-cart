@@ -68,7 +68,14 @@ class Cart:
             )
         except models.Item.DoesNotExist:
             raise ItemDoesNotExist
-            
+        else: #ItemAlreadyExists
+            if quantity == 0:
+                item.delete()
+            else:
+                item.unit_price = unit_price
+                item.quantity = int(quantity)
+                item.save()
+
     def count(self):
         result = 0
         for item in self.cart.item_set.all():
