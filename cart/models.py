@@ -52,6 +52,9 @@ class Item(models.Model):
     def set_product(self, product):
         self.content_type = ContentType.objects.get_for_model(type(product))
         self.object_id = product.pk
+        
+    def is_comprised_of_matter(self):
+        return True
 
     product = property(get_product, set_product)
 
