@@ -1,13 +1,16 @@
-import datetime
-import models
+from . import models
+from django.utils import timezone
 
 CART_ID = 'CART-ID'
+
 
 class ItemAlreadyExists(Exception):
     pass
 
+
 class ItemDoesNotExist(Exception):
     pass
+
 
 class Cart:
     def __init__(self, request):
@@ -26,7 +29,7 @@ class Cart:
             yield item
 
     def new(self, request):
-        cart = models.Cart(creation_date=datetime.datetime.now())
+        cart = models.Cart(creation_date=timezone.now())
         cart.save()
         request.session[CART_ID] = cart.id
         return cart
@@ -44,7 +47,7 @@ class Cart:
             item.unit_price = unit_price
             item.quantity = quantity
             item.save()
-        else: #ItemAlreadyExists
+        else:  # ItemAlreadyExists
             item.unit_price = unit_price
             item.quantity += int(quantity)
             item.save()
@@ -68,7 +71,7 @@ class Cart:
             )
         except models.Item.DoesNotExist:
             raise ItemDoesNotExist
-        else: #ItemAlreadyExists
+        else:  # ItemAlreadyExists
             if quantity == 0:
                 item.delete()
             else:
@@ -81,7 +84,7 @@ class Cart:
         for item in self.cart.item_set.all():
             result += 1 * item.quantity
         return result
-        
+
     def summary(self):
         result = 0
         for item in self.cart.item_set.all():
@@ -91,4 +94,3 @@ class Cart:
     def clear(self):
         for item in self.cart.item_set.all():
             item.delete()
-
