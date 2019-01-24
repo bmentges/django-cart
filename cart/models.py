@@ -24,11 +24,11 @@ class ItemManager(models.Manager):
         return super(ItemManager, self).get(*args, **kwargs)
 
 class Item(models.Model):
-    cart = models.ForeignKey(Cart, verbose_name=_('cart'))
+    cart = models.ForeignKey(Cart, verbose_name=_('cart'), on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(verbose_name=_('quantity'))
     unit_price = models.DecimalField(max_digits=18, decimal_places=2, verbose_name=_('unit price'))
     # product as generic relation
-    content_type = models.ForeignKey(ContentType)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
 
     objects = ItemManager()
