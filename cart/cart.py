@@ -1,5 +1,6 @@
 import datetime
-import models
+
+from . import models
 
 CART_ID = 'CART-ID'
 
@@ -81,7 +82,7 @@ class Cart:
         for item in self.cart.item_set.all():
             result += 1 * item.quantity
         return result
-        
+
     def summary(self):
         result = 0
         for item in self.cart.item_set.all():
@@ -92,3 +93,16 @@ class Cart:
         for item in self.cart.item_set.all():
             item.delete()
 
+    def is_empty(self):
+        return self.count() == 0
+
+    def cart_serializable(self):
+        representation = {}
+        for item in self.cart.item_set.all():
+            itemID = str(item.object_id)
+            itemToDict = {
+                'total_price': item.total_price,
+                'quantity': item.quantity
+            }
+            representation[itemID] = itemToDict
+        return representation

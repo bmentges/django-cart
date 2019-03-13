@@ -1,10 +1,12 @@
-from cart import models
-from django.test import TestCase, RequestFactory, Client
-from models import Cart, Item
-from django.contrib.auth.models import User, AnonymousUser
 import datetime
 from decimal import Decimal
-from cart import Cart
+
+from django.test import TestCase, RequestFactory, Client
+from django.contrib.auth.models import User, AnonymousUser
+
+from . import models
+from .models import Cart, Item
+from .cart import Cart
 
 class CartAndItemModelsTestCase(TestCase):
 
@@ -25,27 +27,27 @@ class CartAndItemModelsTestCase(TestCase):
         cart.save()
         return cart
 
-    def _create_item_in_database(self, cart, product, quantity=1, 
+    def _create_item_in_database(self, cart, product, quantity=1,
             unit_price=Decimal("100")):
         """
             Helper function so I don't repeat myself
-        """  
+        """
         item = Item()
         item.cart = cart
         item.product = product
         item.quantity = quantity
         item.unit_price = unit_price
-        item.save() 
+        item.save()
 
         return item
 
     def _create_user_in_database(self):
         """
             Helper function so I don't repeat myself
-        """ 
-        user = User(username="user_for_sell", password="sold", 
+        """
+        user = User(username="user_for_sell", password="sold",
                 email="example@example.com")
-        user.save() 
+        user.save()
         return user
 
     def test_cart_creation(self):
@@ -55,7 +57,7 @@ class CartAndItemModelsTestCase(TestCase):
 
         cart_from_database = models.Cart.objects.get(pk=id)
         self.assertEquals(cart, cart_from_database)
-        
+
 
     def test_item_creation_and_association_with_cart(self):
         """
@@ -63,9 +65,9 @@ class CartAndItemModelsTestCase(TestCase):
             any model via django's content type framework. This was
             made in order to enable you to associate an item in the
             cart with your product model.
-            
+
             As I wont make a product model here, I will assume my test
-            store sells django users (django.contrib.auth.models.User) 
+            store sells django users (django.contrib.auth.models.User)
             (lol) so I can test that this is working.
 
             So if you are reading this test to understand the API,
@@ -79,20 +81,20 @@ class CartAndItemModelsTestCase(TestCase):
 
         # get the first item in the cart
         item_in_cart = cart.item_set.all()[0]
-        self.assertEquals(item_in_cart, item, 
+        self.assertEquals(item_in_cart, item,
                 "First item in cart should be equal the item we created")
         self.assertEquals(item_in_cart.product, user,
                 "Product associated with the first item in cart should equal the user we're selling")
-        self.assertEquals(item_in_cart.unit_price, Decimal("100"), 
+        self.assertEquals(item_in_cart.unit_price, Decimal("100"),
                 "Unit price of the first item stored in the cart should equal 100")
-        self.assertEquals(item_in_cart.quantity, 1, 
+        self.assertEquals(item_in_cart.quantity, 1,
                 "The first item in cart should have 1 in it's quantity")
 
 
     def test_total_item_price(self):
         """
         Since the unit price is a Decimal field, prefer to associate
-        unit prices instantiating the Decimal class in 
+        unit prices instantiating the Decimal class in
         decimal.Decimal.
         """
         user = self._create_user_in_database()
@@ -103,7 +105,7 @@ class CartAndItemModelsTestCase(TestCase):
         item_with_unit_price_as_integer = self._create_item_in_database(cart, product=user, quantity=3, unit_price=100)
 
         self.assertEquals(item_with_unit_price_as_integer.total_price, 300)
-        
+
         # this is the right way to associate unit prices
         item_with_unit_price_as_decimal = self._create_item_in_database(cart,
                 product=user, quantity=4, unit_price=Decimal("3.20"))
