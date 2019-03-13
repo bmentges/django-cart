@@ -48,7 +48,7 @@ def remove_from_cart(request, product_id):
     cart.remove(product)
 
 def get_cart(request):
-    return render_to_response('cart.html', dict(cart=Cart(request)))
+    return render(request, 'cart.html', {'cart': Cart(request)})
 ```
 
 ```django
@@ -75,7 +75,7 @@ def get_cart(request):
 
 ## Some Info
 
-This project was abandoned and I got it and added tests and South migrations, and I will be maintaining it from now on. 
+This project was abandoned and I got it and added tests and South migrations, and I will be maintaining it from now on.
 
 ## Known Problems
 
