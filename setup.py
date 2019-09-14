@@ -15,6 +15,9 @@ setup(
         license="GNU v3",
         url='https://github.com/bmentges/django-cart',
         packages=['cart', 'cart.migrations'],
+        install_requires=[
+            'Django>=1.1',
+        ],
         classifiers=[
             "Development Status :: 5 - Production/Stable", 
             "Environment :: Web Environment",
