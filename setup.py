@@ -28,4 +28,5 @@ setup(
             "Programming Language :: Python",
             "Topic :: Software Development :: Libraries :: Python Modules",
         ],
+        tes_suite="tests.run_tests.run_tests"
      )
