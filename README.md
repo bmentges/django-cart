@@ -1,5 +1,7 @@
 # Introduction
 
+[![Build Status](https://travis-ci.com/bmentges/django-cart.svg?branch=master)](https://travis-ci.com/bmentges/django-cart)
+
 django-cart is a very simple application that just let you add and remove items from a session based cart. django-cart uses the power of the Django content type framework to enable you to have your own Product model and associate with the cart without having to change anything. Please refer to the tests to see how it's done.
 
 ## Prerequisites
