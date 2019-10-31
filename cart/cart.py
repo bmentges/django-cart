@@ -67,6 +67,8 @@ class Cart:
                 cart=self.cart,
                 product=product,
             )
+            item.quantity += quantity
+            item.save()
         except models.Item.DoesNotExist:
             raise ItemDoesNotExist
         else: #ItemAlreadyExists
