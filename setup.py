@@ -3,8 +3,10 @@
 import os
 from setuptools import setup
 
+
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -24,7 +26,7 @@ setup(
             'Django>=1.1',
         ],
         classifiers=[
-            "Development Status :: 5 - Production/Stable", 
+            "Development Status :: 5 - Production/Stable",
             "Environment :: Web Environment",
             "Framework :: Django",
             "Intended Audience :: Developers",
