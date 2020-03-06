@@ -5,8 +5,8 @@ from django.test import TestCase, RequestFactory, Client
 from django.contrib.auth.models import User, AnonymousUser
 
 from . import models
-from .models import Cart, Item
 from .cart import Cart
+
 
 class CartAndItemModelsTestCase(TestCase):
 
@@ -16,38 +16,25 @@ class CartAndItemModelsTestCase(TestCase):
         self.request.user = AnonymousUser()
         self.request.session = {}
 
-    def _create_cart_in_database(self, creation_date=datetime.datetime.now(),
-            checked_out=False):
+    def _create_cart_in_database(self, creation_date=datetime.datetime.now(), checked_out=False):
         """
             Helper function so I don't repeat myself
         """
-        cart = models.Cart()
-        cart.creation_date = creation_date
-        cart.checked_out = False
-        cart.save()
+        cart = models.Cart.objects.create(creation_date=creation_date, checked_out=checked_out)
         return cart
 
-    def _create_item_in_database(self, cart, product, quantity=1,
-            unit_price=Decimal("100")):
+    def _create_item_in_database(self, cart, product, quantity=1, unit_price=Decimal("100")):
         """
             Helper function so I don't repeat myself
         """
-        item = Item()
-        item.cart = cart
-        item.product = product
-        item.quantity = quantity
-        item.unit_price = unit_price
-        item.save()
-
+        item = models.Item.objects.create(cart=cart, product=product, quantity=quantity, unit_price=unit_price)
         return item
 
     def _create_user_in_database(self):
         """
             Helper function so I don't repeat myself
         """
-        user = User(username="user_for_sell", password="sold",
-                email="example@example.com")
-        user.save()
+        user = User.objects.create(username="user_for_sell", password="sold", email="example@example.com")
         return user
 
     def test_cart_creation(self):
@@ -57,7 +44,6 @@ class CartAndItemModelsTestCase(TestCase):
 
         cart_from_database = models.Cart.objects.get(pk=id)
         self.assertEquals(cart, cart_from_database)
-
 
     def test_item_creation_and_association_with_cart(self):
         """
@@ -81,15 +67,13 @@ class CartAndItemModelsTestCase(TestCase):
 
         # get the first item in the cart
         item_in_cart = cart.item_set.all()[0]
-        self.assertEquals(item_in_cart, item,
-                "First item in cart should be equal the item we created")
+        self.assertEquals(item_in_cart, item, "First item in cart should be equal the item we created")
         self.assertEquals(item_in_cart.product, user,
-                "Product associated with the first item in cart should equal the user we're selling")
+                          "Product associated with the first item in cart should equal the user we're selling")
         self.assertEquals(item_in_cart.unit_price, Decimal("100"),
-                "Unit price of the first item stored in the cart should equal 100")
+                          "Unit price of the first item stored in the cart should equal 100")
         self.assertEquals(item_in_cart.quantity, 1,
-                "The first item in cart should have 1 in it's quantity")
-
+                          "The first item in cart should have 1 in it's quantity")
 
     def test_total_item_price(self):
         """
@@ -107,8 +91,8 @@ class CartAndItemModelsTestCase(TestCase):
         self.assertEquals(item_with_unit_price_as_integer.total_price, 300)
 
         # this is the right way to associate unit prices
-        item_with_unit_price_as_decimal = self._create_item_in_database(cart,
-                product=user, quantity=4, unit_price=Decimal("3.20"))
+        item_with_unit_price_as_decimal = self._create_item_in_database(cart, product=user, quantity=4,
+                                                                        unit_price=Decimal("3.20"))
         self.assertEquals(item_with_unit_price_as_decimal.total_price, Decimal("12.80"))
 
     def test_update_cart(self):

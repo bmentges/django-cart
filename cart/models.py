@@ -15,6 +15,7 @@ class Cart(models.Model):
     def __unicode__(self):
         return unicode(self.creation_date)
 
+
 class ItemManager(models.Manager):
     def get(self, *args, **kwargs):
         if 'product' in kwargs:
@@ -22,6 +23,14 @@ class ItemManager(models.Manager):
             kwargs['object_id'] = kwargs['product'].pk
             del(kwargs['product'])
         return super(ItemManager, self).get(*args, **kwargs)
+
+    def filter(self, *args, **kwargs):
+        if 'product' in kwargs:
+            kwargs['content_type'] = ContentType.objects.get_for_model(type(kwargs['product']))
+            kwargs['object_id'] = kwargs['product'].pk
+            del(kwargs['product'])
+        return super(ItemManager, self).filter(*args, **kwargs)
+
 
 class Item(models.Model):
     cart = models.ForeignKey(Cart, verbose_name=_('cart'), on_delete=models.CASCADE)
@@ -54,4 +63,3 @@ class Item(models.Model):
         self.object_id = product.pk
 
     product = property(get_product, set_product)
-
