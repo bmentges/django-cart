@@ -16,3 +16,12 @@ install:
 script:
   - tox
 
+deploy:
+  provider: pypi
+  user: "bmentges"
+  password: $PYPI_PASSWORD
+  all_branches: true
+  on: 
+    tags: true
+    branch: master
+  skip_existing: true
