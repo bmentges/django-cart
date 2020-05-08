@@ -1,9 +1,13 @@
 import datetime
 from django.db.models import Sum
 from django.db.models import F
+from django.conf import settings
 from . import models
 
-CART_ID = 'CART-ID'
+if settings.CART_ID:
+    CART_ID = settings.CART_ID
+else:
+    CART_ID = 'CART-ID'
 
 
 class ItemAlreadyExists(Exception):
