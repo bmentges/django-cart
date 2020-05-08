@@ -35,6 +35,12 @@ After installation is complete:
 A basic usage of django-cart could be (example):
 
 ```python
+# settings.py
+
+CART_ID = 'CART_ID' # set the name of your session cookie for the cart
+```
+
+```python
 # views.py
 from cart.cart import Cart
 from myproducts.models import Product
