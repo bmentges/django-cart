@@ -1,86 +1,196 @@
-import datetime
-from django.db.models import Sum
-from django.db.models import F
+from decimal import Decimal
+
+from django.db.models import F, Sum
+from django.utils import timezone
+
 from . import models
 
-CART_ID = 'CART-ID'
+CART_ID = "CART-ID"
 
 
-class ItemAlreadyExists(Exception):
-    pass
+class CartException(Exception):
+    """Base exception for all cart errors."""
 
 
-class ItemDoesNotExist(Exception):
-    pass
+class ItemAlreadyExists(CartException):
+    """Raised when attempting to add a product that is already in the cart."""
+
+
+class ItemDoesNotExist(CartException):
+    """Raised when attempting to operate on a product not in the cart."""
+
+
+class InvalidQuantity(CartException):
+    """Raised when a quantity value is invalid (e.g. negative)."""
 
 
 class Cart:
+    """
+    Session-backed shopping cart.
+
+    Associates a :class:`cart.models.Cart` database record with the current
+    session and exposes a clean API for managing its items.
+
+    Usage::
+
+        cart = Cart(request)
+        cart.add(product, unit_price=Decimal("9.99"), quantity=2)
+        cart.remove(product)
+        total = cart.summary()
+    """
+
     def __init__(self, request):
         cart_id = request.session.get(CART_ID)
+        cart = None
         if cart_id:
             cart = models.Cart.objects.filter(id=cart_id, checked_out=False).first()
-            if cart is None:
-                cart = self.new(request)
-        else:
-            cart = self.new(request)
+        if cart is None:
+            cart = self._new(request)
         self.cart = cart
 
-    def __iter__(self):
-        for item in self.cart.item_set.all():
-            yield item
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-    def new(self, request):
-        cart = models.Cart.objects.create(creation_date=datetime.datetime.now())
+    def _new(self, request) -> models.Cart:
+        cart = models.Cart.objects.create(creation_date=timezone.now())
         request.session[CART_ID] = cart.id
         return cart
 
-    def add(self, product, unit_price, quantity=1):
-        item = models.Item.objects.filter(cart=self.cart, product=product).first()
+    def _get_item(self, product) -> models.Item | None:
+        return models.Item.objects.filter(cart=self.cart, product=product).first()
+
+    # ------------------------------------------------------------------
+    # Iteration / dunder helpers
+    # ------------------------------------------------------------------
+
+    def __iter__(self):
+        return iter(self.cart.items.select_related("content_type").all())
+
+    def __len__(self):
+        return self.count()
+
+    def __contains__(self, product):
+        return self._get_item(product) is not None
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def add(self, product, unit_price: Decimal, quantity: int = 1) -> models.Item:
+        """
+        Add *product* to the cart.
+
+        If the product is already present its quantity is incremented and the
+        unit price is updated to *unit_price*.
+
+        :param product: Any Django model instance.
+        :param unit_price: Price per unit as a :class:`~decimal.Decimal`.
+        :param quantity: Number of units to add (must be ≥ 1).
+        :returns: The :class:`~cart.models.Item` that was created or updated.
+        :raises InvalidQuantity: if *quantity* is less than 1.
+        """
+        if int(quantity) < 1:
+            raise InvalidQuantity("Quantity must be at least 1.")
+
+        item = self._get_item(product)
         if item:
             item.unit_price = unit_price
             item.quantity += int(quantity)
-            item.save()
+            item.save(update_fields=["unit_price", "quantity"])
         else:
-            models.Item.objects.create(cart=self.cart, product=product, unit_price=unit_price, quantity=quantity)
+            item = models.Item.objects.create(
+                cart=self.cart,
+                product=product,
+                unit_price=unit_price,
+                quantity=int(quantity),
+            )
+        return item
 
-    def remove(self, product):
-        item = models.Item.objects.filter(cart=self.cart, product=product).first()
-        if item:
+    def remove(self, product) -> None:
+        """
+        Remove *product* from the cart entirely.
+
+        :raises ItemDoesNotExist: if the product is not in the cart.
+        """
+        item = self._get_item(product)
+        if item is None:
+            raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
+        item.delete()
+
+    def update(self, product, quantity: int, unit_price: Decimal | None = None) -> models.Item:
+        """
+        Update the quantity (and optionally the unit price) for *product*.
+
+        Passing *quantity* = 0 removes the item entirely.
+
+        :raises ItemDoesNotExist: if the product is not in the cart.
+        :raises InvalidQuantity: if *quantity* is negative.
+        """
+        if int(quantity) < 0:
+            raise InvalidQuantity("Quantity cannot be negative.")
+
+        item = self._get_item(product)
+        if item is None:
+            raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
+
+        if int(quantity) == 0:
             item.delete()
-        else:
-            raise ItemDoesNotExist
+            return item
 
-    def update(self, product, quantity, unit_price=None):
-        item = models.Item.objects.filter(cart=self.cart, product=product).first()
-        if item:
-            if quantity == 0:
-                item.delete()
-            else:
-                item.unit_price = unit_price
-                item.quantity = int(quantity)
-                item.save()
-        else:
-            raise ItemDoesNotExist
+        item.quantity = int(quantity)
+        update_fields = ["quantity"]
+        if unit_price is not None:
+            item.unit_price = unit_price
+            update_fields.append("unit_price")
+        item.save(update_fields=update_fields)
+        return item
 
-    def count(self):
-        return self.cart.item_set.all().aggregate(Sum('quantity')).get('quantity__sum', 0)
+    def count(self) -> int:
+        """Return the total number of *units* across all items."""
+        result = self.cart.items.aggregate(total=Sum("quantity"))["total"]
+        return result or 0
 
-    def summary(self):
-        return self.cart.item_set.all().aggregate(total=Sum(F('quantity')*F('unit_price'))).get('total', 0)
+    def unique_count(self) -> int:
+        """Return the number of distinct products in the cart."""
+        return self.cart.items.count()
 
-    def clear(self):
-        self.cart.item_set.all().delete()
+    def summary(self) -> Decimal:
+        """Return the grand total price for all items."""
+        result = self.cart.items.aggregate(
+            total=Sum(F("quantity") * F("unit_price"))
+        )["total"]
+        return result or Decimal("0.00")
 
-    def is_empty(self):
+    def clear(self) -> None:
+        """Remove all items from the cart (but keep the cart record)."""
+        self.cart.items.all().delete()
+
+    def checkout(self) -> None:
+        """Mark the cart as checked out."""
+        self.cart.checked_out = True
+        self.cart.save(update_fields=["checked_out"])
+
+    def is_empty(self) -> bool:
+        """Return ``True`` if the cart contains no items."""
         return self.count() == 0
 
-    def cart_serializable(self):
-        representation = {}
-        for item in self.cart.item_set.all():
-            item_id = str(item.object_id)
-            item_dict = {
-                'total_price': item.total_price,
-                'quantity': item.quantity
+    def cart_serializable(self) -> dict:
+        """
+        Return a JSON-serialisable dict representation of the cart.
+
+        Example output::
+
+            {
+                "42": {"total_price": "19.98", "quantity": 2, "unit_price": "9.99"},
+                ...
             }
-            representation[item_id] = item_dict
-        return representation
+        """
+        return {
+            str(item.object_id): {
+                "total_price": str(item.total_price),
+                "unit_price": str(item.unit_price),
+                "quantity": item.quantity,
+            }
+            for item in self.cart.items.all()
+        }

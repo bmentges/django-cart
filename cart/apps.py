@@ -1,7 +1,6 @@
-from __future__ import unicode_literals
-
 from django.apps import AppConfig
 
 
 class CartConfig(AppConfig):
-    name = 'cart'
+    name = "cart"
+    verbose_name = "Shopping Cart"
