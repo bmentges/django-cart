@@ -1,6 +1,0 @@
-include README.md
-include LICENSE
-include MANIFEST.in
-include AUTHORS
-graft cart
-graft tests
