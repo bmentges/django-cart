@@ -29,13 +29,10 @@ if not settings.configured:
 
 django.setup()
 
-# Register FakeProduct so ContentType can resolve it
-from tests.test_cart import FakeProduct  # noqa: E402  (must come after setup)
-from django.contrib.contenttypes.models import ContentType  # noqa: E402
-
 if __name__ == "__main__":
     TestRunner = get_runner(settings)
     test_runner = TestRunner(verbosity=2, failfast=False)
     module = sys.argv[1] if len(sys.argv) > 1 else "tests"
     failures = test_runner.run_tests([module])
     sys.exit(bool(failures))
+    
