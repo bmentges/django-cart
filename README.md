@@ -1,4 +1,4 @@
-[![CI/CD:](https://github.com/bmentges/django-cart/actions/workflows/ci.yml/badge.svg)](https://github.com/bmentges/django-cart/actions/workflows/ci.yml)  ![PyPI - Version](https://img.shields.io/pypi/v/django-cart?label=PYPI%20Latest%20Version%3A)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/bmentges/django-cart/ci.yml?style=for-the-badge&logo=github&logoColor=white&logoSize=auto&label=CI%2FCD%20Build%3A)  ![PyPI - Version](https://img.shields.io/pypi/v/django-cart?style=for-the-badge&logo=pypi&logoColor=white&logoSize=auto&label=PYPI%20Latest%20Version%3A)
 
 # django-cart
 
