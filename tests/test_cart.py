@@ -12,43 +12,43 @@ Covers:
 import io
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import django
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, RequestFactory
+from django.db import models as django_models
+from django.test import TestCase
 from django.utils import timezone
 
-# ---------------------------------------------------------------------------
-# Minimal fake product model used across all tests
-# ---------------------------------------------------------------------------
-from django.db import models as django_models
-
-
-class FakeProduct(django_models.Model):
-    """Lightweight in-memory product used as a generic FK target."""
-    name = django_models.CharField(max_length=100)
-    price = django_models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
-
-    class Meta:
-        app_label = "cart"
-
-
-# ---------------------------------------------------------------------------
-# Import cart modules *after* Django setup so models resolve correctly
-# ---------------------------------------------------------------------------
 from cart.models import Cart as CartModel, Item
 from cart.cart import (
     Cart,
-    CartException,
-    ItemAlreadyExists,
     ItemDoesNotExist,
     InvalidQuantity,
     CART_ID,
 )
-from cart.management.commands.clean_carts import Command as CleanCartsCommand
+from cart.management.commands.clean_carts import Command as CleanCartsCommand  # noqa: F401
+
+
+# ---------------------------------------------------------------------------
+# Concrete product model used as a generic FK target in tests.
+# Registered in INSTALLED_APPS via app_label = "cart" so it gets a real
+# ContentType row and a real DB table in the test database.
+# ---------------------------------------------------------------------------
+
+class FakeProduct(django_models.Model):
+    """Lightweight product model used only in tests."""
+    name = django_models.CharField(max_length=100)
+    price = django_models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00")
+    )
+
+    class Meta:
+        app_label = "cart"
+
+    def __str__(self):
+        return self.name
 
 
 # ---------------------------------------------------------------------------
@@ -56,21 +56,15 @@ from cart.management.commands.clean_carts import Command as CleanCartsCommand
 # ---------------------------------------------------------------------------
 
 def make_request(session=None):
-    """Return a mock request object with an optional pre-populated session."""
+    """Return a minimal mock request with a dict-based session."""
     request = MagicMock()
     request.session = session if session is not None else {}
     return request
 
 
 def make_product(name="Widget", price="9.99"):
-    """Create and return a FakeProduct instance."""
-    ct = ContentType.objects.get_for_model(FakeProduct)
-    # We don't actually save to the DB (FakeProduct is not migrated),
-    # so we stub the pk on a MagicMock that walks like a model instance.
-    product = MagicMock(spec=FakeProduct)
-    product.pk = hash(name) % 10_000 + 1  # stable, positive int
-    product.__class__ = FakeProduct
-    return product
+    """Create and persist a FakeProduct instance."""
+    return FakeProduct.objects.create(name=name, price=Decimal(price))
 
 
 def make_cart_model(**kwargs):
@@ -113,7 +107,7 @@ class CartModelTest(TestCase):
 class ItemManagerTest(TestCase):
     def setUp(self):
         self.cart = make_cart_model()
-        self.product = make_product()
+        self.product = make_product("Alpha")
         ct = ContentType.objects.get_for_model(FakeProduct)
         self.item = Item.objects.create(
             cart=self.cart,
@@ -133,7 +127,7 @@ class ItemManagerTest(TestCase):
         self.assertEqual(item.pk, self.item.pk)
 
     def test_filter_unknown_product_returns_empty(self):
-        other = make_product("Unknown", "1.00")
+        other = make_product("Unknown")
         qs = Item.objects.filter(cart=self.cart, product=other)
         self.assertEqual(qs.count(), 0)
 
@@ -145,7 +139,7 @@ class ItemManagerTest(TestCase):
 class ItemModelTest(TestCase):
     def setUp(self):
         self.cart = make_cart_model()
-        self.product = make_product()
+        self.product = make_product("Beta")
         ct = ContentType.objects.get_for_model(FakeProduct)
         self.item = Item.objects.create(
             cart=self.cart,
@@ -201,7 +195,6 @@ class CartInitTest(TestCase):
         cart = Cart(request)
         cart.cart.checked_out = True
         cart.cart.save()
-        # New request with same session still pointing to the checked-out cart
         new_cart = Cart(request)
         self.assertNotEqual(new_cart.cart.pk, cart.cart.pk)
 
@@ -210,7 +203,7 @@ class CartAddTest(TestCase):
     def setUp(self):
         self.request = make_request()
         self.cart = Cart(self.request)
-        self.product = make_product()
+        self.product = make_product("Widget")
 
     def test_add_new_product(self):
         self.cart.add(self.product, Decimal("5.00"), quantity=2)
@@ -244,7 +237,7 @@ class CartRemoveTest(TestCase):
     def setUp(self):
         self.request = make_request()
         self.cart = Cart(self.request)
-        self.product = make_product()
+        self.product = make_product("Removable")
         self.cart.add(self.product, Decimal("5.00"), quantity=1)
 
     def test_remove_existing_product(self):
@@ -252,12 +245,12 @@ class CartRemoveTest(TestCase):
         self.assertTrue(self.cart.is_empty())
 
     def test_remove_nonexistent_product_raises(self):
-        other = make_product("Ghost", "1.00")
+        other = make_product("Ghost")
         with self.assertRaises(ItemDoesNotExist):
             self.cart.remove(other)
 
     def test_remove_reduces_item_count(self):
-        p2 = make_product("Widget2", "3.00")
+        p2 = make_product("Second")
         self.cart.add(p2, Decimal("3.00"), quantity=4)
         self.cart.remove(self.product)
         self.assertEqual(self.cart.unique_count(), 1)
@@ -267,7 +260,7 @@ class CartUpdateTest(TestCase):
     def setUp(self):
         self.request = make_request()
         self.cart = Cart(self.request)
-        self.product = make_product()
+        self.product = make_product("Updatable")
         self.cart.add(self.product, Decimal("5.00"), quantity=3)
 
     def test_update_quantity(self):
@@ -284,7 +277,7 @@ class CartUpdateTest(TestCase):
         self.assertEqual(item.unit_price, Decimal("9.99"))
 
     def test_update_nonexistent_product_raises(self):
-        ghost = make_product("Ghost", "0.00")
+        ghost = make_product("Ghost2")
         with self.assertRaises(ItemDoesNotExist):
             self.cart.update(ghost, quantity=1)
 
@@ -297,8 +290,8 @@ class CartAggregatesTest(TestCase):
     def setUp(self):
         self.request = make_request()
         self.cart = Cart(self.request)
-        self.p1 = make_product("A", "10.00")
-        self.p2 = make_product("B", "4.00")
+        self.p1 = make_product("ProductA")
+        self.p2 = make_product("ProductB")
         self.cart.add(self.p1, Decimal("10.00"), quantity=2)  # 20.00
         self.cart.add(self.p2, Decimal("4.00"), quantity=5)   # 20.00
 
@@ -325,12 +318,13 @@ class CartAggregatesTest(TestCase):
         self.assertIn(self.p1, self.cart)
 
     def test_not_contains(self):
-        ghost = make_product("Ghost")
+        ghost = make_product("GhostProduct")
         self.assertNotIn(ghost, self.cart)
 
 
 class CartEmptyAggregatesTest(TestCase):
     """Edge cases on an empty cart."""
+
     def setUp(self):
         self.request = make_request()
         self.cart = Cart(self.request)
@@ -345,7 +339,7 @@ class CartEmptyAggregatesTest(TestCase):
         self.assertTrue(self.cart.is_empty())
 
     def test_clear_empty_does_not_raise(self):
-        self.cart.clear()  # Should be a no-op
+        self.cart.clear()  # should be a no-op
 
     def test_iteration_empty(self):
         self.assertEqual(list(self.cart), [])
@@ -355,7 +349,7 @@ class CartCheckoutTest(TestCase):
     def test_checkout_marks_cart(self):
         request = make_request()
         cart = Cart(request)
-        product = make_product()
+        product = make_product("CheckoutProduct")
         cart.add(product, Decimal("1.00"))
         cart.checkout()
         cart.cart.refresh_from_db()
@@ -366,7 +360,7 @@ class CartSerializableTest(TestCase):
     def test_cart_serializable_structure(self):
         request = make_request()
         cart = Cart(request)
-        product = make_product("Gadget", "15.00")
+        product = make_product("Gadget")
         cart.add(product, Decimal("15.00"), quantity=2)
         data = cart.cart_serializable()
         key = str(product.pk)
@@ -477,7 +471,7 @@ class CleanCartsCommandTest(TestCase):
     def test_items_cascade_deleted(self):
         """Deleting an old cart must also remove its items."""
         old = self._old_cart(days=100)
-        product = make_product()
+        product = make_product("CascadeProduct")
         ct = ContentType.objects.get_for_model(FakeProduct)
         item = Item.objects.create(
             cart=old,
@@ -488,3 +482,4 @@ class CleanCartsCommandTest(TestCase):
         )
         self._call(days=90)
         self.assertFalse(Item.objects.filter(pk=item.pk).exists())
+        
