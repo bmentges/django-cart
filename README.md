@@ -1,3 +1,5 @@
+[![CI](https://github.com/bmentges/django-cart/actions/workflows/ci.yml/badge.svg)](https://github.com/bmentges/django-cart/actions/workflows/ci.yml)
+
 # django-cart
 
 A simple, session-backed shopping cart for **modern Django (4.2+)** and **Python 3.10+**.
