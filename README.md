@@ -1,4 +1,4 @@
-[![CI/CD:](https://github.com/bmentges/django-cart/actions/workflows/ci.yml/badge.svg)](https://github.com/bmentges/django-cart/actions/workflows/ci.yml)
+[![CI/CD:](https://github.com/bmentges/django-cart/actions/workflows/ci.yml/badge.svg)](https://github.com/bmentges/django-cart/actions/workflows/ci.yml)  ![PyPI - Version](https://img.shields.io/pypi/v/django-cart?label=PYPI%20Latest%20Version%3A)
 
 # django-cart
 
