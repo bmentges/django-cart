@@ -22,6 +22,7 @@ if not settings.configured:
             "django.contrib.contenttypes",
             "django.contrib.auth",
             "cart",
+            "tests.test_app",
         ],
         USE_TZ=True,
         DEFAULT_AUTO_FIELD="django.db.models.AutoField",
