@@ -29,26 +29,7 @@ from cart.cart import (
     CART_ID,
 )
 from cart.management.commands.clean_carts import Command as CleanCartsCommand  # noqa: F401
-
-
-# ---------------------------------------------------------------------------
-# Concrete product model used as a generic FK target in tests.
-# Registered in INSTALLED_APPS via app_label = "cart" so it gets a real
-# ContentType row and a real DB table in the test database.
-# ---------------------------------------------------------------------------
-
-class FakeProduct(django_models.Model):
-    """Lightweight product model used only in tests."""
-    name = django_models.CharField(max_length=100)
-    price = django_models.DecimalField(
-        max_digits=10, decimal_places=2, default=Decimal("0.00")
-    )
-
-    class Meta:
-        app_label = "cart"
-
-    def __str__(self):
-        return self.name
+from tests.test_app.models import FakeProduct
 
 
 # ---------------------------------------------------------------------------
