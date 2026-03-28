@@ -538,4 +538,325 @@ class CartAtomicTest(TransactionTestCase):
             pass
         item = cart.cart.items.first()
         self.assertEqual(item.quantity, 1)
+
+
+# ===========================================================================
+# Item.product property tests
+# ===========================================================================
+
+class ItemProductPropertyTest(TestCase):
+    def setUp(self):
+        self.cart = make_cart_model()
+        self.product = make_product("ProductGetter")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        self.item = Item.objects.create(
+            cart=self.cart,
+            content_type=ct,
+            object_id=self.product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=2,
+        )
+
+    def test_product_getter_returns_product_instance(self):
+        """Item.product getter should return the associated product."""
+        retrieved = self.item.product
+        self.assertEqual(retrieved.pk, self.product.pk)
+        self.assertEqual(retrieved.name, self.product.name)
+
+    def test_product_setter_updates_content_type_and_object_id(self):
+        """Item.product setter should update content_type and object_id."""
+        new_product = make_product("NewProduct")
+        self.item.product = new_product
+        self.assertEqual(self.item.object_id, new_product.pk)
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        self.assertEqual(self.item.content_type, ct)
+
+
+# ===========================================================================
+# Cart iteration tests
+# ===========================================================================
+
+class CartIterationTest(TestCase):
+    def test_iter_returns_items(self):
+        """__iter__ should yield cart items."""
+        request = make_request()
+        cart = Cart(request)
+        p1 = make_product("IterProduct1")
+        p2 = make_product("IterProduct2")
+        cart.add(p1, Decimal("5.00"), quantity=1)
+        cart.add(p2, Decimal("10.00"), quantity=2)
+        items = list(cart)
+        self.assertEqual(len(items), 2)
+
+    def test_iter_with_single_item(self):
+        """__iter__ with single item should yield that item."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("SingleIter")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        items = list(cart)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].quantity, 1)
+
+
+# ===========================================================================
+# Cart checkout edge cases
+# ===========================================================================
+
+class CartCheckoutEdgeCaseTest(TestCase):
+    def test_checkout_empty_cart(self):
+        """Checkout should mark empty cart as checked out."""
+        request = make_request()
+        cart = Cart(request)
+        self.assertTrue(cart.is_empty())
+        cart.checkout()
+        cart.cart.refresh_from_db()
+        self.assertTrue(cart.cart.checked_out)
+
+    def test_new_cart_after_checkout(self):
+        """After checkout, a new request should create a fresh cart."""
+        request1 = make_request()
+        cart1 = Cart(request1)
+        cart1.checkout()
+        request2 = make_request()
+        cart2 = Cart(request2)
+        self.assertNotEqual(cart1.cart.pk, cart2.cart.pk)
+
+
+# ===========================================================================
+# Decimal precision and boundary tests
+# ===========================================================================
+
+class DecimalAndBoundaryTest(TestCase):
+    def test_large_quantity(self):
+        """Cart should handle large quantities correctly."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("LargeQty")
+        cart.add(product, Decimal("0.01"), quantity=999999)
+        self.assertEqual(cart.count(), 999999)
+        self.assertEqual(cart.summary(), Decimal("9999.99"))
+
+    def test_decimal_precision(self):
+        """Prices should maintain decimal precision."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("Precision")
+        cart.add(product, Decimal("0.01"), quantity=1)
+        cart.add(product, Decimal("0.02"), quantity=1)
+        item = cart.cart.items.first()
+        self.assertEqual(item.unit_price, Decimal("0.02"))
+        self.assertEqual(cart.summary(), Decimal("0.04"))
+
+    def test_zero_unit_price(self):
+        """Free items with zero price should be allowed."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("Freebie")
+        cart.add(product, Decimal("0.00"), quantity=5)
+        self.assertEqual(cart.count(), 5)
+        self.assertEqual(cart.summary(), Decimal("0.00"))
+
+    def test_large_unit_price(self):
+        """Large prices should be handled correctly."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("Expensive")
+        cart.add(product, Decimal("999999.99"), quantity=1)
+        self.assertEqual(cart.summary(), Decimal("999999.99"))
+
+
+# ===========================================================================
+# Cart serialization tests
+# ===========================================================================
+
+class CartSerializationTest(TestCase):
+    def test_cart_serializable_with_unicode_name(self):
+        """Serialization should handle unicode product names."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("Produkt mit Ümläuten")
+        cart.add(product, Decimal("10.00"), quantity=2)
+        data = cart.cart_serializable()
+        self.assertIn(str(product.pk), data)
+
+    def test_cart_serializable_multiple_items(self):
+        """Serialization should handle multiple items."""
+        request = make_request()
+        cart = Cart(request)
+        p1 = make_product("Multi1")
+        p2 = make_product("Multi2")
+        cart.add(p1, Decimal("5.00"), quantity=1)
+        cart.add(p2, Decimal("10.00"), quantity=3)
+        data = cart.cart_serializable()
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[str(p1.pk)]["total_price"], "5.00")
+        self.assertEqual(data[str(p2.pk)]["total_price"], "30.00")
+
+
+# ===========================================================================
+# Session behavior tests
+# ===========================================================================
+
+class CartSessionTest(TestCase):
+    def test_session_updated_on_cart_creation(self):
+        """Session should be updated when new cart is created."""
+        request = make_request()
+        cart = Cart(request)
+        self.assertIn(CART_ID, request.session)
+        self.assertEqual(request.session[CART_ID], cart.cart.pk)
+
+    def test_session_persists_across_cart_instances(self):
+        """Same session should return same cart."""
+        session = {}
+        request1 = make_request(session=session)
+        request2 = make_request(session=session)
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+        self.assertEqual(cart1.cart.pk, cart2.cart.pk)
+
+
+# ===========================================================================
+# ItemManager edge case tests
+# ===========================================================================
+
+class ItemManagerEdgeCaseTest(TestCase):
+    def test_filter_with_nonexistent_product_id(self):
+        """Filter with non-existent object_id should return empty."""
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        qs = Item.objects.filter(content_type=ct, object_id=99999)
+        self.assertEqual(qs.count(), 0)
+
+    def test_get_with_invalid_kwargs_raises(self):
+        """Passing invalid kwargs should raise appropriate error."""
+        from django.core.exceptions import FieldError
+        with self.assertRaises(FieldError):
+            Item.objects.get(nonexistent_field="value")
+
+
+# ===========================================================================
+# Model uniqueness tests
+# ===========================================================================
+
+class ItemUniquenessTest(TestCase):
+    def test_same_product_different_carts_allowed(self):
+        """Same product can exist in different carts."""
+        cart1 = make_cart_model()
+        cart2 = make_cart_model()
+        product = make_product("SharedProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        Item.objects.create(
+            cart=cart1, content_type=ct, object_id=product.pk,
+            unit_price=Decimal("5.00"), quantity=1
+        )
+        Item.objects.create(
+            cart=cart2, content_type=ct, object_id=product.pk,
+            unit_price=Decimal("5.00"), quantity=2
+        )
+        self.assertEqual(Item.objects.count(), 2)
+
+    def test_update_existing_item_quantity(self):
+        """Updating an existing item should modify it, not create duplicate."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("UpdateTest")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        cart.add(product, Decimal("5.00"), quantity=2)
+        self.assertEqual(cart.unique_count(), 1)
+        self.assertEqual(cart.count(), 3)
+
+
+# ===========================================================================
+# Admin tests
+# ===========================================================================
+
+class CartAdminTest(TestCase):
+    def setUp(self):
+        from django.contrib.admin import site
+        from cart.admin import CartAdmin
+        self.cart = make_cart_model()
+        self.product = make_product("AdminProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        Item.objects.create(
+            cart=self.cart,
+            content_type=ct,
+            object_id=self.product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=2,
+        )
+        self.admin = CartAdmin(CartModel, site)
+
+    def test_item_count_returns_correct_count(self):
+        """CartAdmin.item_count should return the number of items in the cart."""
+        self.assertEqual(self.admin.item_count(self.cart), 1)
+
+    def test_item_count_zero_for_empty_cart(self):
+        """CartAdmin.item_count should return 0 for empty cart."""
+        empty_cart = make_cart_model()
+        self.assertEqual(self.admin.item_count(empty_cart), 0)
+
+    def test_item_count_short_description(self):
+        """CartAdmin.item_count should have correct short_description."""
+        self.assertEqual(self.admin.item_count.short_description, "Items")
+
+    def test_cart_admin_has_list_display(self):
+        """CartAdmin should have correct list_display."""
+        self.assertIn("id", self.admin.list_display)
+        self.assertIn("creation_date", self.admin.list_display)
+        self.assertIn("checked_out", self.admin.list_display)
+        self.assertIn("item_count", self.admin.list_display)
+
+    def test_cart_admin_has_list_filter(self):
+        """CartAdmin should have correct list_filter."""
+        self.assertIn("checked_out", self.admin.list_filter)
+
+
+class ItemInlineTest(TestCase):
+    def setUp(self):
+        from django.contrib.admin import site
+        from cart.admin import ItemInline
+        self.cart = make_cart_model()
+        self.product = make_product("InlineProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        self.item = Item.objects.create(
+            cart=self.cart,
+            content_type=ct,
+            object_id=self.product.pk,
+            unit_price=Decimal("5.00"),
+            quantity=3,
+        )
+        self.inline = ItemInline(Item, site)
+
+    def test_inline_total_price_method(self):
+        """ItemInline.total_price should return item's total_price."""
+        result = self.inline.total_price(self.item)
+        self.assertEqual(result, Decimal("15.00"))
+
+    def test_inline_total_price_short_description(self):
+        """ItemInline.total_price should have correct short_description."""
+        from cart.admin import ItemInline
+        self.assertEqual(ItemInline.total_price.short_description, "Total")
+
+    def test_inline_model_is_item(self):
+        """ItemInline should use Item model."""
+        from cart.admin import ItemInline
+        self.assertEqual(ItemInline.model, Item)
+
+    def test_inline_extra_is_zero(self):
+        """ItemInline should have extra=0."""
+        from cart.admin import ItemInline
+        self.assertEqual(ItemInline.extra, 0)
+
+    def test_inline_readonly_fields(self):
+        """ItemInline should have correct readonly_fields."""
+        from cart.admin import ItemInline
+        expected = ("content_type", "object_id", "unit_price", "quantity")
+        self.assertEqual(tuple(ItemInline.readonly_fields), expected)
+
+    def test_cart_admin_has_inlines(self):
+        """CartAdmin should include ItemInline."""
+        from cart.admin import CartAdmin, ItemInline
+        admin = CartAdmin(CartModel, None)
+        self.assertIn(ItemInline, admin.inlines)
+
         
