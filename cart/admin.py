@@ -5,7 +5,7 @@ from .models import Cart, Item
 class ItemInline(admin.TabularInline):
     model = Item
     extra = 0
-    readonly_fields = ("content_type", "object_id", "unit_price", "quantity", "total_price")
+    readonly_fields = ("content_type", "object_id", "unit_price", "quantity")
 
     def total_price(self, obj):
         return obj.total_price
