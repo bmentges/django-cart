@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import F, Sum
 from django.utils import timezone
 
@@ -93,18 +94,19 @@ class Cart:
         if int(quantity) < 1:
             raise InvalidQuantity("Quantity must be at least 1.")
 
-        item = self._get_item(product)
-        if item:
-            item.unit_price = unit_price
-            item.quantity += int(quantity)
-            item.save(update_fields=["unit_price", "quantity"])
-        else:
-            item = models.Item.objects.create(
-                cart=self.cart,
-                product=product,
-                unit_price=unit_price,
-                quantity=int(quantity),
-            )
+        with transaction.atomic():
+            item = self._get_item(product)
+            if item:
+                item.unit_price = unit_price
+                item.quantity += int(quantity)
+                item.save(update_fields=["unit_price", "quantity"])
+            else:
+                item = models.Item.objects.create(
+                    cart=self.cart,
+                    product=product,
+                    unit_price=unit_price,
+                    quantity=int(quantity),
+                )
         return item
 
     def remove(self, product) -> None:
@@ -130,20 +132,21 @@ class Cart:
         if int(quantity) < 0:
             raise InvalidQuantity("Quantity cannot be negative.")
 
-        item = self._get_item(product)
-        if item is None:
-            raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
+        with transaction.atomic():
+            item = self._get_item(product)
+            if item is None:
+                raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
 
-        if int(quantity) == 0:
-            item.delete()
-            return item
+            if int(quantity) == 0:
+                item.delete()
+                return item
 
-        item.quantity = int(quantity)
-        update_fields = ["quantity"]
-        if unit_price is not None:
-            item.unit_price = unit_price
-            update_fields.append("unit_price")
-        item.save(update_fields=update_fields)
+            item.quantity = int(quantity)
+            update_fields = ["quantity"]
+            if unit_price is not None:
+                item.unit_price = unit_price
+                update_fields.append("unit_price")
+            item.save(update_fields=update_fields)
         return item
 
     def count(self) -> int:

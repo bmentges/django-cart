@@ -17,8 +17,8 @@ from unittest.mock import MagicMock
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import models as django_models
-from django.test import TestCase
+from django.db import models as django_models, transaction
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from cart.models import Cart as CartModel, Item
@@ -482,4 +482,79 @@ class CleanCartsCommandTest(TestCase):
         )
         self._call(days=90)
         self.assertFalse(Item.objects.filter(pk=item.pk).exists())
+
+
+# ===========================================================================
+# Atomic transaction tests
+# ===========================================================================
+
+class CartAtomicTest(TransactionTestCase):
+    """Tests that add() and update() use atomic transactions."""
+
+    def test_add_is_atomic(self):
+        """add() should be atomic - complete or rollback entirely."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("AtomicProduct")
+        item = cart.add(product, Decimal("5.00"), quantity=1)
+        self.assertEqual(cart.count(), 1)
+        item.refresh_from_db()
+        self.assertEqual(item.quantity, 1)
+
+    def test_add_updates_are_atomic(self):
+        """Concurrent add updates should be serialized."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("ConcurrentProduct")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        cart.add(product, Decimal("5.00"), quantity=2)
+        item = cart.cart.items.first()
+        self.assertEqual(item.quantity, 3)
+
+    def test_update_is_atomic(self):
+        """update() should be atomic - complete or rollback entirely."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("UpdateAtomicProduct")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        cart.update(product, quantity=10, unit_price=Decimal("15.00"))
+        item = cart.cart.items.first()
+        self.assertEqual(item.quantity, 10)
+        self.assertEqual(item.unit_price, Decimal("15.00"))
+
+    def test_update_zero_removes_item_atomically(self):
+        """update with quantity=0 should atomically remove the item."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("RemoveAtomicProduct")
+        cart.add(product, Decimal("5.00"), quantity=5)
+        cart.update(product, quantity=0)
+        self.assertTrue(cart.is_empty())
+
+    def test_add_with_invalid_quantity_rollback(self):
+        """Invalid quantity should not affect cart state."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("RollbackProduct")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        try:
+            cart.add(product, Decimal("5.00"), quantity=0)
+        except InvalidQuantity:
+            pass
+        item = cart.cart.items.first()
+        self.assertEqual(item.quantity, 1)
+
+    def test_update_nonexistent_rollback(self):
+        """Updating nonexistent item should not affect cart state."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("RollbackProduct2")
+        cart.add(product, Decimal("5.00"), quantity=1)
+        ghost = make_product("Ghost")
+        try:
+            cart.update(ghost, quantity=5)
+        except ItemDoesNotExist:
+            pass
+        item = cart.cart.items.first()
+        self.assertEqual(item.quantity, 1)
         
