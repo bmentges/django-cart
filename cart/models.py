@@ -29,7 +29,7 @@ class ItemManager(models.Manager):
     def _inject_content_type(self, kwargs: dict) -> dict:
         if "product" in kwargs:
             product = kwargs.pop("product")
-            kwargs["content_type"] = ContentType.objects.get_for_model(type(product))
+            kwargs["content_type"] = ContentType.objects.get_for_model(product._meta.model)
             kwargs["object_id"] = product.pk
         return kwargs
 
@@ -82,5 +82,5 @@ class Item(models.Model):
 
     @product.setter
     def product(self, product):
-        self.content_type = ContentType.objects.get_for_model(type(product))
+        self.content_type = ContentType.objects.get_for_model(product._meta.model)
         self.object_id = product.pk
