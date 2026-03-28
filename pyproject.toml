@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-cart"
-version = "2.2.3"
+version = "2.2.4"
 authors = [
   { name="Bruno Mentges de Carvalho", email="bruno@mentgesinformatica.com.br" },
 ]
@@ -20,6 +20,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-django",
+    "coverage",
 ]
 
 [tool.pytest.ini_options]

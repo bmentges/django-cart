@@ -355,6 +355,44 @@ The test suite covers:
 
 ---
 
+## Running Code Coverage
+
+Install coverage tool:
+
+```bash
+pip install coverage
+```
+
+Run tests with coverage:
+
+```bash
+coverage run runtests.py
+```
+
+Generate a coverage report in the terminal:
+
+```bash
+coverage report
+```
+
+Generate an HTML coverage report (results saved to `htmlcov/`):
+
+```bash
+coverage html
+```
+
+Open the HTML report in your browser:
+
+```bash
+open htmlcov/index.html  # macOS
+# or
+xdg-open htmlcov/index.html  # Linux
+# or
+start htmlcov/index.html  # Windows
+```
+
+---
+
 ## Changelog
 
 ### 2.0.0
