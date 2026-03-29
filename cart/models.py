@@ -85,6 +85,9 @@ class Item(models.Model):
         verbose_name_plural = _("items")
         ordering = ("cart",)
         unique_together = ("cart", "content_type", "object_id")
+        indexes = [
+            models.Index(fields=["cart", "content_type", "object_id"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.quantity} × {self.content_type.model} (id={self.object_id})"
