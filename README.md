@@ -16,6 +16,9 @@ django-cart uses Django's [content-type framework](https://docs.djangoproject.co
 - [Quick Start](#quick-start)
 - [Cart API Reference](#cart-api-reference)
 - [Template Example](#template-example)
+- [Django Signals](#django-signals)
+- [Template Tags](#template-tags)
+- [Session Adapters](#session-adapters)
 - [Cleaning Old Carts](#cleaning-old-carts)
 - [Scheduling with Cron](#scheduling-with-cron)
 - [Running the Tests](#running-the-tests)
@@ -28,8 +31,11 @@ django-cart uses Django's [content-type framework](https://docs.djangoproject.co
 - Works with any product model via Django's generic foreign keys
 - `add`, `remove`, `update`, `clear`, `checkout` operations
 - `count`, `summary`, `is_empty`, `cart_serializable` helpers
+- **Django signals** for extensibility (item added, removed, updated, cart checked out, cart cleared)
+- **Template tags** for easy cart display in templates (item count, summary, is_empty, cart link)
+- **Session adapters** for flexible session storage (Django sessions, cookies)
 - Management command `clean_carts` with configurable retention window
-- Full test suite (125+ tests) covering success, error, integration, and performance cases
+- Full test suite (159 tests) covering success, error, integration, and performance cases
 - Type hints for full IDE and static analysis support
 - Product caching to avoid N+1 queries when iterating
 - Pre-commit hooks for code quality (black, isort, flake8, mypy)
@@ -229,6 +235,202 @@ item.total_price    # Decimal  (quantity × unit_price)
 
 ---
 
+## Django Signals
+
+django-cart emits Django signals at key cart events, enabling easy integration with analytics, notifications, and custom logic.
+
+### Available Signals
+
+| Signal | Description |
+|---|---|
+| `cart_item_added` | Emitted when an item is added to the cart |
+| `cart_item_removed` | Emitted when an item is removed from the cart |
+| `cart_item_updated` | Emitted when an item quantity is updated |
+| `cart_checked_out` | Emitted when checkout is completed |
+| `cart_cleared` | Emitted when the cart is cleared |
+
+### Signal Payloads
+
+All signals provide the same sender (`Cart` instance) and keyword arguments:
+- `cart`: The cart instance
+- `product`: The product instance
+- `quantity`: The quantity involved
+- `unit_price`: The unit price
+- `total_price`: The total price for the item
+
+### Example: Connect a Signal Handler
+
+```python
+# signals.py
+from django.dispatch import receiver
+from cart.signals import cart_item_added, cart_item_removed, cart_checked_out
+
+
+@receiver(cart_item_added)
+def log_cart_addition(sender, cart, product, quantity, unit_price, total_price, **kwargs):
+    print(f"Added {quantity}x {product} to cart (total: {total_price})")
+    # Track analytics, send notifications, etc.
+
+
+@receiver(cart_item_removed)
+def log_cart_removal(sender, cart, product, **kwargs):
+    print(f"Removed {product} from cart")
+
+
+@receiver(cart_checked_out)
+def handle_checkout(sender, cart, **kwargs):
+    print(f"Cart {cart.id} checked out with total: {cart.summary}")
+    # Trigger order processing, send confirmation email, etc.
+```
+
+### Connecting Signals
+
+In your Django app's `ready` method:
+
+```python
+# myapp/apps.py
+from django.apps import AppConfig
+
+
+class MyAppConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "myapp"
+
+    def ready(self):
+        import myapp.signals  # noqa: F401
+```
+
+### Signals Are Optional
+
+The cart works perfectly fine without signals. If the signals module is not available, cart operations continue without errors.
+
+---
+
+## Template Tags
+
+django-cart provides template tags for easy cart display in your templates.
+
+### Loading Template Tags
+
+```html
+{% load cart_tags %}
+```
+
+### Available Tags
+
+#### `cart_item_count`
+
+Returns the total number of items in the cart:
+
+```html
+<p>Items in cart: {% cart_item_count request %}</p>
+```
+
+#### `cart_summary`
+
+Returns the grand total of the cart:
+
+```html
+<p>Total: {% cart_summary request %}</p>
+```
+
+#### `cart_is_empty`
+
+Returns `True` if the cart is empty:
+
+```html
+{% if cart_is_empty request %}
+    <p>Your cart is empty</p>
+{% else %}
+    <a href="{% url 'cart_detail' %}">View Cart</a>
+{% endif %}
+```
+
+#### `cart_link`
+
+Renders a link to the cart with optional CSS class and text:
+
+```html
+{# Basic usage #}
+{% cart_link request %}
+
+{# With CSS class #}
+{% cart_link request "btn btn-primary" %}
+
+{# With custom text and CSS class #}
+{% cart_link request "btn" "View Shopping Cart" %}
+```
+
+---
+
+## Session Adapters
+
+django-cart uses session adapters to store the cart ID in the session. You can use the built-in adapters or create custom ones.
+
+### Available Adapters
+
+| Adapter | Description |
+|---|---|
+| `DjangoSessionAdapter` | Stores cart ID in Django's default session backend |
+| `CookieSessionAdapter` | Stores cart ID in a signed cookie (no server-side session required) |
+
+### Using CookieSessionAdapter
+
+```python
+# settings.py
+from cart.session import CookieSessionAdapter
+
+CARTS_SESSION_ADAPTER_CLASS = CookieSessionAdapter
+```
+
+### Custom Session Adapter
+
+Create your own adapter by subclassing `CartSessionAdapter`:
+
+```python
+# myapp/session.py
+from cart.session import CartSessionAdapter
+
+
+class RedisSessionAdapter(CartSessionAdapter):
+    """Store cart ID in Redis instead of Django sessions."""
+
+    def __init__(self, request):
+        super().__init__(request)
+        import redis
+        self.redis = redis.Redis(host="localhost", port=6379)
+
+    def _get_session_key(self):
+        return f"cart:{self.request.session.session_key}"
+
+    def _set_session_key(self, value):
+        self.redis.set(self._get_session_key(), value)
+
+    def _del_session_key(self):
+        self.redis.delete(self._get_session_key())
+```
+
+Then configure it in settings:
+
+```python
+# settings.py
+CARTS_SESSION_ADAPTER_CLASS = "myapp.session.RedisSessionAdapter"
+```
+
+### CartSessionAdapter API
+
+All adapters must implement these methods:
+
+| Method | Description |
+|---|---|
+| `get()` | Get the cart ID from storage |
+| `set(cart_id)` | Store the cart ID |
+| `delete()` | Remove the cart ID |
+| `get_or_create_cart_id()` | Get existing or create new cart ID |
+| `cart_id` (property) | Get or set cart ID via property |
+
+---
+
 ## Cleaning Old Carts
 
 Over time, abandoned sessions leave orphaned `Cart` rows in your database. The `clean_carts` management command removes them.
@@ -359,6 +561,9 @@ The test suite covers:
 - Integration tests — session handling, cart operations, serialization
 - Performance benchmarks — add, summary, and iteration timing
 - Admin operations — changelist, search, and filtering
+- Signals — cart_item_added, cart_item_removed, cart_item_updated, cart_checked_out, cart_cleared
+- Template tags — cart_item_count, cart_summary, cart_is_empty, cart_link
+- Session adapters — DjangoSessionAdapter, CookieSessionAdapter
 
 ---
 
