@@ -4,10 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## v2.6.1
 
-- Add manual PyPI publishing workflow via workflow_dispatch
-
-## v2.6.0
-
 - Add cart merge functionality with three strategies: 'add' (default), 'replace', 'keep_higher'
 - Add user binding via optional ForeignKey on Cart model
 - Add bind_to_user() method to associate cart with user account
