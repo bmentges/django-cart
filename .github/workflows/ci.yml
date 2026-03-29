@@ -39,6 +39,10 @@ jobs:
           coverage report
           coverage xml
  
+      - name: Override Coverage Source Path for Sonar
+        run: |
+          sed -i 's@${{ github.workspace }}@/github/workspace/@g' coverage.xml
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v3
         with:
