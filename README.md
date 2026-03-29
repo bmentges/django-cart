@@ -29,7 +29,11 @@ django-cart uses Django's [content-type framework](https://docs.djangoproject.co
 - `add`, `remove`, `update`, `clear`, `checkout` operations
 - `count`, `summary`, `is_empty`, `cart_serializable` helpers
 - Management command `clean_carts` with configurable retention window
-- Full test suite covering success, error, and edge cases
+- Full test suite (125+ tests) covering success, error, integration, and performance cases
+- Type hints for full IDE and static analysis support
+- Product caching to avoid N+1 queries when iterating
+- Pre-commit hooks for code quality (black, isort, flake8, mypy)
+- Automated dependency updates via Dependabot
 
 ---
 
@@ -348,9 +352,13 @@ The test suite covers:
 
 - `CartModel` — creation, ordering, defaults
 - `ItemManager` — filter/get by product instance
-- `Item` model — `total_price`, `unique_together` constraint
+- `Item` model — `total_price`, `unique_together` constraint, unit price validation
 - `Cart` class — all public methods (success, error, and edge cases)
+- `Cart` class — atomic operations, session persistence, serialization
 - `clean_carts` command — deletion, dry-run, boundary conditions, cascade behaviour
+- Integration tests — session handling, cart operations, serialization
+- Performance benchmarks — add, summary, and iteration timing
+- Admin operations — changelist, search, and filtering
 
 ---
 
@@ -388,6 +396,51 @@ open htmlcov/index.html  # macOS
 xdg-open htmlcov/index.html  # Linux
 # or
 start htmlcov/index.html  # Windows
+```
+
+---
+
+## Developer Setup
+
+### Pre-commit Hooks
+
+This project uses pre-commit hooks to maintain code quality. Install them with:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+The hooks include:
+- **black** — Code formatting
+- **isort** — Import sorting
+- **flake8** — Linting
+- **mypy** — Type checking
+
+### Automated Dependencies
+
+This project uses [Dependabot](.github/dependabot.yml) for automated dependency updates:
+- Python packages (weekly schedule)
+- GitHub Actions (weekly schedule)
+
+### Performance Considerations
+
+The cart uses product caching to avoid N+1 queries when iterating over items. The `Item.product` property caches the product instance on first access.
+
+```python
+# Efficient - single query per item, then cached
+for item in cart:
+    print(item.product.name)  # Cached after first access
+```
+
+### Serialization
+
+The `cart_serializable()` method returns a JSON-safe dictionary for API responses:
+
+```python
+cart = Cart(request)
+data = cart.cart_serializable()
+# Returns: {'123': {'quantity': 2, 'unit_price': '9.99', 'total_price': '19.98'}, ...}
 ```
 
 
