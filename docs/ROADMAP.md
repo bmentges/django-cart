@@ -1,6 +1,6 @@
 # django-cart Development Roadmap
 
-**Current Version:** 2.7.0  
+**Current Version:** 3.0.0 (In Progress)  
 **Last Updated:** March 2026  
 **Repository:** https://github.com/bmentges/django-cart
 
