@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.6.0
+
+- Add cart merge functionality with three strategies: 'add' (default), 'replace', 'keep_higher'
+- Add user binding via optional ForeignKey on Cart model
+- Add bind_to_user() method to associate cart with user account
+- Add get_user_carts() classmethod to retrieve all carts for a user
+- Add add_bulk() method for efficient multiple item operations
+- Add CART_MAX_QUANTITY_PER_ITEM setting to enforce per-item quantity limits
+- Add cart/migrations/0003_add_user_fk.py for user ForeignKey migration
+- Add 25 new tests covering merge, user binding, bulk operations, and max quantity
+
 ## v2.5.2
 
 - Remove SonarCloud from CI/CD workflow (simpler pipeline, no more coverage tracking in CI)

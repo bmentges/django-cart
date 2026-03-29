@@ -1429,3 +1429,466 @@ class ModelsCoverageTest(TestCase):
         )
         item.product = product2
         self.assertEqual(item.object_id, product2.pk)
+
+
+# ===========================================================================
+# TestGroup: Cart Merge Tests (v2.6.0)
+# ===========================================================================
+
+class CartMergeTest(TestCase):
+    """Test cart merge functionality."""
+
+    def test_merge_add_strategy(self):
+        """Merge with 'add' strategy should combine quantities."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("MergeProduct")
+
+        cart1.add(product, Decimal("10.00"), quantity=2)
+        cart2.add(product, Decimal("10.00"), quantity=3)
+
+        cart1.merge(cart2, strategy='add')
+
+        item = cart1.cart.items.first()
+        self.assertEqual(item.quantity, 5)
+
+    def test_merge_replace_strategy(self):
+        """Merge with 'replace' should use other cart's quantities."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("ReplaceProduct")
+
+        cart1.add(product, Decimal("10.00"), quantity=2)
+        cart2.add(product, Decimal("10.00"), quantity=5)
+
+        cart1.merge(cart2, strategy='replace')
+
+        item = cart1.cart.items.first()
+        self.assertEqual(item.quantity, 5)
+
+    def test_merge_keep_higher_strategy(self):
+        """Merge with 'keep_higher' should keep max quantity."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("HigherProduct")
+
+        cart1.add(product, Decimal("10.00"), quantity=3)
+        cart2.add(product, Decimal("10.00"), quantity=7)
+
+        cart1.merge(cart2, strategy='keep_higher')
+
+        item = cart1.cart.items.first()
+        self.assertEqual(item.quantity, 7)
+
+    def test_merge_adds_new_products(self):
+        """Merge should add products not in original cart."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product1 = make_product("Product1")
+        product2 = make_product("Product2")
+
+        cart1.add(product1, Decimal("10.00"), quantity=1)
+        cart2.add(product2, Decimal("20.00"), quantity=2)
+
+        cart1.merge(cart2)
+
+        self.assertEqual(cart1.unique_count(), 2)
+        self.assertEqual(cart1.count(), 3)
+
+    def test_merge_empties_other_cart(self):
+        """Merge should clear the other cart after merging."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("EmptyOther")
+        cart1.add(product, Decimal("10.00"), quantity=1)
+        cart2.add(product, Decimal("10.00"), quantity=2)
+
+        cart1.merge(cart2)
+
+        self.assertTrue(cart2.is_empty())
+
+    def test_merge_default_strategy_is_add(self):
+        """Default merge strategy should be 'add'."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("DefaultStrategy")
+        cart1.add(product, Decimal("10.00"), quantity=2)
+        cart2.add(product, Decimal("10.00"), quantity=3)
+
+        cart1.merge(cart2)
+
+        item = cart1.cart.items.first()
+        self.assertEqual(item.quantity, 5)
+
+    def test_merge_updates_unit_price(self):
+        """Merge should update unit price from other cart."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("PriceUpdate")
+        cart1.add(product, Decimal("10.00"), quantity=1)
+        cart2.add(product, Decimal("15.00"), quantity=2)
+
+        cart1.merge(cart2)
+
+        item = cart1.cart.items.first()
+        self.assertEqual(item.unit_price, Decimal("15.00"))
+
+
+# ===========================================================================
+# TestGroup: Cart Merge Error Cases (v2.6.0)
+# ===========================================================================
+
+class CartMergeErrorTest(TestCase):
+    """Test cart merge error handling."""
+
+    def test_merge_with_invalid_strategy_raises(self):
+        """Invalid merge strategy should raise ValueError."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        with self.assertRaises(ValueError):
+            cart1.merge(cart2, strategy='invalid')
+
+    def test_merge_preserves_this_cart_on_error(self):
+        """Original cart should be unchanged if merge fails."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("PreserveProduct")
+        cart1.add(product, Decimal("10.00"), quantity=5)
+
+        original_quantity = cart1.count()
+
+        with self.assertRaises(ValueError):
+            cart1.merge(cart2, strategy='invalid')
+
+        self.assertEqual(cart1.count(), original_quantity)
+
+    def test_merge_same_cart_raises(self):
+        """Merging cart with itself should raise error."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("SameCart")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        with self.assertRaises(ValueError):
+            cart.merge(cart)
+
+    def test_merge_with_empty_cart(self):
+        """Merging empty cart should be no-op."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product = make_product("EmptyMerge")
+        cart1.add(product, Decimal("10.00"), quantity=1)
+
+        cart1.merge(cart2)
+
+        self.assertEqual(cart1.count(), 1)
+
+
+# ===========================================================================
+# TestGroup: User Binding Tests (v2.6.0)
+# ===========================================================================
+
+class CartUserBindingTest(TestCase):
+    """Test cart-user binding functionality."""
+
+    def test_bind_to_user(self):
+        """bind_to_user should associate cart with user."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        user = User.objects.create_user('testuser', 'test@example.com', 'pass123')
+        request = make_request()
+        cart = Cart(request)
+
+        cart.bind_to_user(user)
+
+        cart.cart.refresh_from_db()
+        self.assertEqual(cart.cart.user, user)
+
+    def test_get_user_carts(self):
+        """get_user_carts should return all carts for user."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        user = User.objects.create_user('testuser2', 'test2@example.com', 'pass123')
+        request = make_request()
+        cart = Cart(request)
+
+        cart.bind_to_user(user)
+        product = make_product("UserCartProduct")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        carts = Cart.get_user_carts(user)
+        self.assertEqual(carts.count(), 1)
+
+    def test_unbound_cart_has_no_user(self):
+        """Unbound cart should have null user."""
+        request = make_request()
+        cart = Cart(request)
+
+        self.assertIsNone(cart.cart.user)
+
+    def test_multiple_carts_per_user(self):
+        """User can have multiple carts."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        user = User.objects.create_user('testuser3', 'test3@example.com', 'pass123')
+
+        request1 = make_request()
+        cart1 = Cart(request1)
+        cart1.bind_to_user(user)
+        cart1.add(make_product("Multi1"), Decimal("10.00"), quantity=1)
+
+        request2 = make_request()
+        cart2 = Cart(request2)
+        cart2.bind_to_user(user)
+        cart2.add(make_product("Multi2"), Decimal("20.00"), quantity=2)
+
+        carts = Cart.get_user_carts(user)
+        self.assertEqual(carts.count(), 2)
+
+
+# ===========================================================================
+# TestGroup: Bulk Operations Tests (v2.6.0)
+# ===========================================================================
+
+class CartBulkOperationsTest(TestCase):
+    """Test bulk cart operations."""
+
+    def test_add_bulk_multiple_items(self):
+        """add_bulk should add multiple items efficiently."""
+        request = make_request()
+        cart = Cart(request)
+
+        items = [
+            {'product': make_product("Bulk1"), 'unit_price': Decimal("10.00"), 'quantity': 1},
+            {'product': make_product("Bulk2"), 'unit_price': Decimal("20.00"), 'quantity': 2},
+            {'product': make_product("Bulk3"), 'unit_price': Decimal("30.00"), 'quantity': 3},
+        ]
+
+        result = cart.add_bulk(items)
+
+        self.assertEqual(len(result), 3)
+        self.assertEqual(cart.count(), 6)
+        self.assertEqual(cart.summary(), Decimal("140.00"))
+
+    def test_add_bulk_updates_existing_items(self):
+        """add_bulk should update existing items."""
+        request = make_request()
+        cart = Cart(request)
+
+        product = make_product("BulkUpdate")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        items = [
+            {'product': product, 'unit_price': Decimal("15.00"), 'quantity': 5},
+        ]
+
+        cart.add_bulk(items)
+
+        self.assertEqual(cart.count(), 5)
+        item = cart.cart.items.first()
+        self.assertEqual(item.unit_price, Decimal("15.00"))
+
+    def test_add_bulk_empty_list(self):
+        """add_bulk with empty list should be no-op."""
+        request = make_request()
+        cart = Cart(request)
+
+        result = cart.add_bulk([])
+
+        self.assertEqual(result, [])
+        self.assertTrue(cart.is_empty())
+
+    def test_add_bulk_returns_item_list(self):
+        """add_bulk should return list of items."""
+        request = make_request()
+        cart = Cart(request)
+
+        items = [
+            {'product': make_product("BulkReturn"), 'unit_price': Decimal("10.00"), 'quantity': 2},
+        ]
+
+        result = cart.add_bulk(items)
+
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].quantity, 2)
+
+
+# ===========================================================================
+# TestGroup: Maximum Quantity Tests (v2.6.0)
+# ===========================================================================
+
+class CartMaxQuantityTest(TestCase):
+    """Test maximum quantity enforcement."""
+
+    def test_add_exceeds_max_quantity_raises(self):
+        """Adding quantity above max should raise InvalidQuantity."""
+        from django.test import override_settings
+
+        with override_settings(CART_MAX_QUANTITY_PER_ITEM=10):
+            request = make_request()
+            cart = Cart(request)
+            product = make_product("MaxProduct")
+
+            with self.assertRaises(InvalidQuantity):
+                cart.add(product, Decimal("10.00"), quantity=11)
+
+    def test_add_within_max_quantity_succeeds(self):
+        """Adding quantity within max should succeed."""
+        from django.test import override_settings
+
+        with override_settings(CART_MAX_QUANTITY_PER_ITEM=10):
+            request = make_request()
+            cart = Cart(request)
+            product = make_product("ValidMax")
+
+            cart.add(product, Decimal("10.00"), quantity=10)
+            self.assertEqual(cart.count(), 10)
+
+    def test_update_exceeds_max_quantity_raises(self):
+        """Updating quantity above max should raise InvalidQuantity."""
+        from django.test import override_settings
+
+        with override_settings(CART_MAX_QUANTITY_PER_ITEM=100):
+            request = make_request()
+            cart = Cart(request)
+            product = make_product("MaxUpdate")
+            cart.add(product, Decimal("10.00"), quantity=50)
+
+            with self.assertRaises(InvalidQuantity):
+                cart.update(product, quantity=101)
+
+    def test_add_existing_item_exceeds_max_raises(self):
+        """Adding to existing item that exceeds max should raise."""
+        from django.test import override_settings
+
+        with override_settings(CART_MAX_QUANTITY_PER_ITEM=10):
+            request = make_request()
+            cart = Cart(request)
+            product = make_product("ExistingExceed")
+            cart.add(product, Decimal("10.00"), quantity=8)
+
+            with self.assertRaises(InvalidQuantity):
+                cart.add(product, Decimal("10.00"), quantity=5)
+
+    def test_max_quantity_not_set_allows_any_quantity(self):
+        """Without CART_MAX_QUANTITY_PER_ITEM, any quantity is allowed."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("NoMax")
+
+        cart.add(product, Decimal("10.00"), quantity=1000)
+        self.assertEqual(cart.count(), 1000)
+
+    def test_add_bulk_respects_max_quantity(self):
+        """add_bulk should enforce max quantity per item."""
+        from django.test import override_settings
+
+        with override_settings(CART_MAX_QUANTITY_PER_ITEM=5):
+            request = make_request()
+            cart = Cart(request)
+
+            items = [
+                {'product': make_product("BulkMax"), 'unit_price': Decimal("10.00"), 'quantity': 10},
+            ]
+
+            with self.assertRaises(InvalidQuantity):
+                cart.add_bulk(items)
+
+
+# ===========================================================================
+# Integration Tests for v2.6.0
+# ===========================================================================
+
+class CartMergeIntegrationTest(TestCase):
+    """Integration tests for cart merge."""
+
+    def test_guest_to_user_login_flow(self):
+        """Simulate guest adding items, then logging in."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        guest_session = {}
+        guest_request = make_request(session=guest_session)
+        guest_cart = Cart(guest_request)
+
+        product1 = make_product("GuestProduct1")
+        guest_cart.add(product1, Decimal("10.00"), quantity=1)
+
+        user = User.objects.create_user('loginuser', 'login@example.com', 'pass123')
+        user_request = make_request(session={'user_id': user.pk})
+
+        user_cart = Cart(user_request)
+        user_cart.bind_to_user(user)
+
+        user_cart.merge(guest_cart, strategy='add')
+
+        self.assertEqual(user_cart.count(), 1)
+        self.assertTrue(guest_cart.is_empty())
+
+    def test_merge_preserves_user_binding(self):
+        """Merge should preserve user binding on target cart."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        user = User.objects.create_user('mergeuser', 'merge@example.com', 'pass123')
+
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart1.bind_to_user(user)
+
+        cart2 = Cart(request2)
+
+        product = make_product("PreserveUser")
+        cart1.add(product, Decimal("10.00"), quantity=1)
+        cart2.add(product, Decimal("10.00"), quantity=2)
+
+        cart1.merge(cart2)
+
+        cart1.cart.refresh_from_db()
+        self.assertEqual(cart1.cart.user, user)

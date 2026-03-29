@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 if TYPE_CHECKING:
+    from django.contrib.auth import get_user_model
     from django.db.models import Model
 
 
@@ -19,6 +20,14 @@ class Cart(models.Model):
     checked_out: models.BooleanField = models.BooleanField(
         default=False,
         verbose_name=_("checked out"),
+    )
+    user = models.ForeignKey(
+        "auth.User",
+        verbose_name=_("user"),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="carts",
     )
 
     class Meta:
