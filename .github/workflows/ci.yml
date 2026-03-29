@@ -31,10 +31,24 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "Django==${{ matrix.django-version }}.*"
+          pip install "Django==${{ matrix.django-version }}.*" coverage
  
-      - name: Run tests
-        run: python runtests.py
+      - name: Run tests with coverage
+        run: |
+          coverage run runtests.py
+          coverage report
+          coverage xml
+ 
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sources=cart
+            -Dsonar.tests=tests
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
   publish:
     name: Publish to PyPI
     needs: test
