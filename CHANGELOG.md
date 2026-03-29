@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.5.1
+
+- Fix SonarCloud issues: remove unused imports from migration file
+- Add sonar.exclusions to exclude migrations and tests from SonarCloud analysis
+
 ## v2.5.0
 
 - Add Django signals for extensibility: cart_item_added, cart_item_removed, cart_item_updated, cart_checked_out, cart_cleared
