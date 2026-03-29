@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.4.0
+
+- Add cart_serializable() method for JSON serialization of cart contents
+- Add CartSerializationIntegrationTest class with full serialization test coverage
+- Add CartViewIntegrationTest class for request-level cart operations
+- Add CartSessionIntegrationTest class for session persistence tests
+- Add CartPerformanceTest class with timing benchmarks for add, summary, and iteration
+- Add CartAdminOperationsTest class for admin changelist, search, and filter operations
+- Improve Cart.__iter__ to return Item instances instead of dicts for consistency
+
 ## v2.3.0
 
 - Add type hints to cart/models.py for better IDE support and static analysis
