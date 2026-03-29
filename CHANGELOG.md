@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.5.2
+
+- Remove SonarCloud from CI/CD workflow (simpler pipeline, no more coverage tracking in CI)
+
 ## v2.5.1
 
 - Fix SonarCloud issues: remove unused imports from migration file
