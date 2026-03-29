@@ -68,7 +68,7 @@ jobs:
           sed -i 's@${{ github.workspace }}@/github/workspace/@g' coverage.xml
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v3
+        uses: SonarSource/sonarcloud-github-action@v5
         with:
           projectBaseDir: .
         env:
