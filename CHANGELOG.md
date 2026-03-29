@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.3.0
+
+- Add type hints to cart/models.py for better IDE support and static analysis
+- Add MinValueValidator to unit_price field to prevent negative prices
+- Fix Item.product N+1 query issue by adding caching with _product_cache attribute
+- Improve Cart.__str__ representation to include cart ID and item count
+- Add .pre-commit-config.yaml with black, isort, flake8, and mypy hooks
+- Add 22 new tests covering type hints, unit price validation, product caching, and string representation
+
 ## v2.2.13
 
 - Separate SonarCloud analysis into dedicated job that runs only on master/main branch pushes (not on PRs or tags)
