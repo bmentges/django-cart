@@ -6,6 +6,21 @@ from django.utils import timezone
 
 from . import models
 
+try:
+    from .signals import (
+        cart_item_added,
+        cart_item_removed,
+        cart_item_updated,
+        cart_checked_out,
+        cart_cleared,
+    )
+except ImportError:
+    cart_item_added = None
+    cart_item_removed = None
+    cart_item_updated = None
+    cart_checked_out = None
+    cart_cleared = None
+
 CART_ID = "CART-ID"
 
 
@@ -107,6 +122,8 @@ class Cart:
                     unit_price=unit_price,
                     quantity=int(quantity),
                 )
+        if cart_item_added is not None:
+            cart_item_added.send(sender=self.__class__, cart=self.cart, item=item)
         return item
 
     def remove(self, product) -> None:
@@ -119,6 +136,8 @@ class Cart:
         if item is None:
             raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
         item.delete()
+        if cart_item_removed is not None:
+            cart_item_removed.send(sender=self.__class__, cart=self.cart, product=product)
 
     def update(self, product, quantity: int, unit_price: Decimal | None = None) -> models.Item:
         """
@@ -139,6 +158,8 @@ class Cart:
 
             if int(quantity) == 0:
                 item.delete()
+                if cart_item_updated is not None:
+                    cart_item_updated.send(sender=self.__class__, cart=self.cart, item=item, deleted=True)
                 return item
 
             item.quantity = int(quantity)
@@ -147,6 +168,8 @@ class Cart:
                 item.unit_price = unit_price
                 update_fields.append("unit_price")
             item.save(update_fields=update_fields)
+        if cart_item_updated is not None:
+            cart_item_updated.send(sender=self.__class__, cart=self.cart, item=item)
         return item
 
     def count(self) -> int:
@@ -168,11 +191,15 @@ class Cart:
     def clear(self) -> None:
         """Remove all items from the cart (but keep the cart record)."""
         self.cart.items.all().delete()
+        if cart_cleared is not None:
+            cart_cleared.send(sender=self.__class__, cart=self.cart)
 
     def checkout(self) -> None:
         """Mark the cart as checked out."""
         self.cart.checked_out = True
         self.cart.save(update_fields=["checked_out"])
+        if cart_checked_out is not None:
+            cart_checked_out.send(sender=self.__class__, cart=self.cart)
 
     def is_empty(self) -> bool:
         """Return ``True`` if the cart contains no items."""
@@ -197,3 +224,33 @@ class Cart:
             }
             for item in self.cart.items.all()
         }
+
+    @classmethod
+    def from_serializable(cls, request, data: dict) -> "Cart":
+        """
+        Restore a cart from serializable data.
+
+        :param request: Django request object.
+        :param data: Dict as produced by :meth:`cart_serializable`.
+        :returns: A :class:`Cart` instance with the restored items.
+
+        Example::
+
+            cart_data = {
+                "42": {"total_price": "19.98", "quantity": 2, "unit_price": "9.99"},
+            }
+            cart = Cart.from_serializable(request, cart_data)
+        """
+        cart = cls(request)
+        for object_id, item_data in data.items():
+            from django.contrib.contenttypes.models import ContentType
+            item = models.Item.objects.filter(
+                cart=cart.cart,
+                object_id=object_id
+            ).first()
+            if item:
+                item.quantity = item_data.get("quantity", item.quantity)
+                if "unit_price" in item_data:
+                    item.unit_price = Decimal(item_data["unit_price"])
+                item.save()
+        return cart

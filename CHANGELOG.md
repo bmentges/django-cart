@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.5.0
+
+- Add Django signals for extensibility: cart_item_added, cart_item_removed, cart_item_updated, cart_checked_out, cart_cleared
+- Add cart templatetags: cart_item_count, cart_summary, cart_is_empty, cart_link
+- Add session adapter classes: CartSessionAdapter (base), DjangoSessionAdapter, CookieSessionAdapter
+- Signals are optional - cart works without signals module
+- Add from_serializable classmethod to Cart for deserialization
+- Add comprehensive tests for signals (7 tests), session adapters (12 tests), and template tags (10 tests)
+
 ## v2.4.1
 
 - Add V240EdgeCaseTest class with edge case tests for v2.4.0 features

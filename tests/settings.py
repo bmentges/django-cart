@@ -9,6 +9,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "cart",
     "tests",
+    "tests.test_app",
 ]
 
 MIDDLEWARE = [
