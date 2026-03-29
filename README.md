@@ -34,8 +34,12 @@ django-cart uses Django's [content-type framework](https://docs.djangoproject.co
 - **Django signals** for extensibility (item added, removed, updated, cart checked out, cart cleared)
 - **Template tags** for easy cart display in templates (item count, summary, is_empty, cart link)
 - **Session adapters** for flexible session storage (Django sessions, cookies)
+- **Cart merge** with configurable strategies (add, replace, keep_higher)
+- **User binding** to persist carts to user accounts
+- **Bulk operations** for efficient multiple item management
+- **Maximum quantity limits** per item via settings
 - Management command `clean_carts` with configurable retention window
-- Full test suite (159 tests) covering success, error, integration, and performance cases
+- Full test suite (209 tests) covering success, error, integration, and performance cases
 - Type hints for full IDE and static analysis support
 - Product caching to avoid N+1 queries when iterating
 - Pre-commit hooks for code quality (black, isort, flake8, mypy)
@@ -170,7 +174,10 @@ cart = Cart(request)
 | `cart.clear()` | Delete all items (keeps the cart record). |
 | `cart.checkout()` | Mark the cart as checked out. |
 | `cart.cart_serializable()` | Returns a JSON-safe `dict` keyed by `object_id`. |
-| `product in cart` | `True` if the product is in the cart (`__contains__`). |
+| `cart.merge(other_cart, strategy)` | Merge another cart into this one. |
+| `cart.bind_to_user(user)` | Bind cart to a user account. |
+| `cart.add_bulk(items)` | Add multiple items efficiently. |
+| `Cart.get_user_carts(user)` | Get all carts for a user. |
 | `len(cart)` | Equivalent to `cart.count()`. |
 | `for item in cart` | Iterate over `Item` instances. |
 
@@ -428,6 +435,186 @@ All adapters must implement these methods:
 | `delete()` | Remove the cart ID |
 | `get_or_create_cart_id()` | Get existing or create new cart ID |
 | `cart_id` (property) | Get or set cart ID via property |
+
+---
+
+## Cart Merge
+
+django-cart supports merging guest carts with user carts when a user logs in.
+
+### Merge Strategies
+
+| Strategy | Description |
+|---|---|
+| `add` | Add quantities together (default) |
+| `replace` | Use the other cart's quantities |
+| `keep_higher` | Keep the higher quantity for duplicates |
+
+### Example: Guest to User Login Flow
+
+```python
+# When a user logs in, merge their guest cart into their user cart
+def login_view(request):
+    user = authenticate(request)
+    if user:
+        login(request, user)
+        
+        # Get guest cart from session
+        guest_cart = Cart(request)
+        
+        # Get or create user cart
+        user_carts = Cart.get_user_carts(user)
+        if user_carts.exists():
+            user_cart = Cart(request)
+            user_cart.cart = user_carts.first()
+        else:
+            user_cart = Cart(request)
+            user_cart.bind_to_user(user)
+        
+        # Merge guest cart into user cart
+        user_cart.merge(guest_cart, strategy='add')
+        
+        return redirect('dashboard')
+```
+
+### Merge API
+
+```python
+cart = Cart(request)
+other_cart = Cart(other_request)
+
+# Add quantities together (default)
+cart.merge(other_cart)
+
+# Replace with other cart's quantities
+cart.merge(other_cart, strategy='replace')
+
+# Keep higher quantity for duplicates
+cart.merge(other_cart, strategy='keep_higher')
+```
+
+---
+
+## User Binding
+
+Persist carts to user accounts so they are available across sessions.
+
+### Binding a Cart to a User
+
+```python
+cart = Cart(request)
+user = request.user
+cart.bind_to_user(user)
+```
+
+### Retrieving User Carts
+
+```python
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+user = User.objects.get(username='john')
+
+# Get all carts for a user
+user_carts = Cart.get_user_carts(user)
+for cart in user_carts:
+    print(f"Cart {cart.id}: {cart.items.count()} items")
+```
+
+### Guest to User Migration
+
+```python
+def on_user_login(request, user):
+    # Get guest cart
+    guest_cart = Cart(request)
+    
+    if not guest_cart.is_empty():
+        # Get user's most recent cart or create new one
+        user_carts = Cart.get_user_carts(user)
+        if user_carts.exists():
+            user_cart = Cart(request)
+            user_cart.cart = user_carts.first()
+        else:
+            user_cart = Cart(request)
+            user_cart.bind_to_user(user)
+        
+        # Merge guest cart into user cart
+        user_cart.merge(guest_cart)
+```
+
+---
+
+## Bulk Operations
+
+Add or update multiple items efficiently with `add_bulk()`.
+
+### Example
+
+```python
+cart = Cart(request)
+
+items = [
+    {'product': product1, 'unit_price': Decimal("10.00"), 'quantity': 2},
+    {'product': product2, 'unit_price': Decimal("20.00"), 'quantity': 1},
+    {'product': product3, 'unit_price': Decimal("30.00"), 'quantity': 3},
+]
+
+result = cart.add_bulk(items)
+# Returns list of Item instances
+
+print(f"Added {len(result)} items")
+print(f"Total: {cart.summary()}")
+```
+
+### Bulk Update
+
+`add_bulk()` also updates existing items:
+
+```python
+product = Product.objects.get(pk=1)
+
+# If product already in cart, it will be updated
+items = [
+    {'product': product, 'unit_price': Decimal("15.00"), 'quantity': 5},
+]
+
+cart.add_bulk(items)
+```
+
+---
+
+## Maximum Quantity Configuration
+
+Limit the maximum quantity allowed per item using the `CART_MAX_QUANTITY_PER_ITEM` setting.
+
+### Configuration
+
+```python
+# settings.py
+CART_MAX_QUANTITY_PER_ITEM = 100  # Max 100 units per item
+```
+
+### Behavior
+
+- Adding an item with quantity exceeding the limit raises `InvalidQuantity`
+- Updating an item quantity above the limit raises `InvalidQuantity`
+- If not set, any quantity is allowed (default behavior)
+
+### Example
+
+```python
+# settings.py
+CART_MAX_QUANTITY_PER_ITEM = 10
+
+# In views
+cart = Cart(request)
+cart.add(product, Decimal("9.99"), quantity=5)  # OK
+
+try:
+    cart.add(product, Decimal("9.99"), quantity=15)  # Raises InvalidQuantity
+except InvalidQuantity as e:
+    print(e)  # "Quantity cannot exceed 10."
+```
 
 ---
 

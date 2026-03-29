@@ -1,7 +1,8 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Sum
+from django.db.models import F, Sum, QuerySet
 from django.utils import timezone
 
 from . import models
@@ -104,16 +105,22 @@ class Cart:
         :param unit_price: Price per unit as a :class:`~decimal.Decimal`.
         :param quantity: Number of units to add (must be ≥ 1).
         :returns: The :class:`~cart.models.Item` that was created or updated.
-        :raises InvalidQuantity: if *quantity* is less than 1.
+        :raises InvalidQuantity: if *quantity* is less than 1 or exceeds CART_MAX_QUANTITY_PER_ITEM.
         """
         if int(quantity) < 1:
             raise InvalidQuantity("Quantity must be at least 1.")
+
+        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        if max_qty is not None and int(quantity) > max_qty:
+            raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
 
         with transaction.atomic():
             item = self._get_item(product)
             if item:
                 item.unit_price = unit_price
                 item.quantity += int(quantity)
+                if max_qty is not None and item.quantity > max_qty:
+                    raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
                 item.save(update_fields=["unit_price", "quantity"])
             else:
                 item = models.Item.objects.create(
@@ -146,10 +153,14 @@ class Cart:
         Passing *quantity* = 0 removes the item entirely.
 
         :raises ItemDoesNotExist: if the product is not in the cart.
-        :raises InvalidQuantity: if *quantity* is negative.
+        :raises InvalidQuantity: if *quantity* is negative or exceeds CART_MAX_QUANTITY_PER_ITEM.
         """
         if int(quantity) < 0:
             raise InvalidQuantity("Quantity cannot be negative.")
+
+        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        if max_qty is not None and int(quantity) > max_qty:
+            raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
 
         with transaction.atomic():
             item = self._get_item(product)
@@ -254,3 +265,125 @@ class Cart:
                     item.unit_price = Decimal(item_data["unit_price"])
                 item.save()
         return cart
+
+    def merge(self, other_cart: "Cart", strategy: str = "add") -> None:
+        """
+        Merge another cart into this one.
+
+        :param other_cart: The cart to merge from.
+        :param strategy: Merge strategy - 'add', 'replace', or 'keep_higher'.
+        :raises ValueError: if strategy is invalid or cart is merged with itself.
+        """
+        if other_cart is self:
+            raise ValueError("Cannot merge a cart with itself.")
+
+        if strategy not in ("add", "replace", "keep_higher"):
+            raise ValueError(
+                f"Invalid merge strategy '{strategy}'. "
+                "Must be 'add', 'replace', or 'keep_higher'."
+            )
+
+        if other_cart.is_empty():
+            return
+
+        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+
+        with transaction.atomic():
+            for other_item in other_cart.cart.items.all():
+                existing_item = self._get_item(other_item.product)
+
+                if existing_item:
+                    if strategy == "add":
+                        new_quantity = existing_item.quantity + other_item.quantity
+                    elif strategy == "replace":
+                        new_quantity = other_item.quantity
+                    else:
+                        new_quantity = max(existing_item.quantity, other_item.quantity)
+
+                    if max_qty is not None and new_quantity > max_qty:
+                        new_quantity = max_qty
+
+                    existing_item.quantity = new_quantity
+                    existing_item.unit_price = other_item.unit_price
+                    existing_item.save(update_fields=["quantity", "unit_price"])
+                else:
+                    new_quantity = other_item.quantity
+                    if max_qty is not None and new_quantity > max_qty:
+                        new_quantity = max_qty
+
+                    models.Item.objects.create(
+                        cart=self.cart,
+                        product=other_item.product,
+                        unit_price=other_item.unit_price,
+                        quantity=new_quantity,
+                    )
+
+            other_cart.clear()
+
+    def bind_to_user(self, user) -> None:
+        """
+        Bind this cart to a user account for persistence.
+
+        :param user: Django User model instance.
+        """
+        self.cart.user = user
+        self.cart.save(update_fields=["user"])
+
+    @classmethod
+    def get_user_carts(cls, user) -> QuerySet[models.Cart]:
+        """
+        Get all carts associated with a user.
+
+        :param user: Django User model instance.
+        :returns: QuerySet of Cart objects.
+        """
+        return models.Cart.objects.filter(user=user)
+
+    def add_bulk(self, items: list[dict]) -> list[models.Item]:
+        """
+        Add multiple items efficiently.
+
+        :param items: List of dicts with 'product', 'unit_price', 'quantity' keys.
+        :returns: List of created/updated Item instances.
+        :raises InvalidQuantity: if any item exceeds CART_MAX_QUANTITY_PER_ITEM.
+
+        Example::
+
+            cart.add_bulk([
+                {'product': product1, 'unit_price': Decimal("10.00"), 'quantity': 2},
+                {'product': product2, 'unit_price': Decimal("20.00"), 'quantity': 1},
+            ])
+        """
+        if not items:
+            return []
+
+        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        result = []
+
+        with transaction.atomic():
+            for item_data in items:
+                product = item_data['product']
+                unit_price = item_data['unit_price']
+                quantity = int(item_data['quantity'])
+
+                if quantity < 1:
+                    raise InvalidQuantity("Quantity must be at least 1.")
+
+                if max_qty is not None and quantity > max_qty:
+                    raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
+
+                item = self._get_item(product)
+                if item:
+                    item.unit_price = unit_price
+                    item.quantity = quantity
+                    item.save(update_fields=["unit_price", "quantity"])
+                else:
+                    item = models.Item.objects.create(
+                        cart=self.cart,
+                        product=product,
+                        unit_price=unit_price,
+                        quantity=quantity,
+                    )
+                result.append(item)
+
+        return result
