@@ -43,12 +43,10 @@ jobs:
         uses: SonarSource/sonarcloud-github-action@v3
         with:
           projectBaseDir: .
-          args: >
-            -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.sources=cart
-            -Dsonar.tests=tests
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
   publish:
     name: Publish to PyPI
     needs: test
