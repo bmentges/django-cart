@@ -178,3 +178,39 @@ class CartSerializationIntegrationTest(TestCase):
         cart.add(product, Decimal("10.00"), quantity=2)
         data = cart.cart_serializable()
         self.assertIn(str(product.pk), data)
+
+
+class V240EdgeCaseTest(TestCase):
+    """Edge case tests for v2.4.0 features."""
+
+    def test_performance_with_decimal_precision(self):
+        """Performance should not degrade with decimal precision."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("Precision")
+
+        cart.add(product, Decimal("0.01"), quantity=1)
+        cart.add(product, Decimal("0.02"), quantity=1)
+
+        start = time.perf_counter()
+        summary = cart.summary()
+        elapsed = time.perf_counter() - start
+
+        self.assertEqual(summary, Decimal("0.04"))
+        self.assertLess(elapsed, 0.05)
+
+    def test_integration_with_custom_session_backend(self):
+        """Cart should work with custom session backends."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("SessionTest")
+
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        session_key = request.session.get(CART_ID)
+        self.assertIsNotNone(session_key)
+
+        request2 = make_request(session=request.session)
+        cart2 = Cart(request2)
+
+        self.assertEqual(cart.cart.pk, cart2.cart.pk)

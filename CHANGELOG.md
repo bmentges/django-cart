@@ -2,15 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.4.1
+
+- Add V240EdgeCaseTest class with edge case tests for v2.4.0 features
+- Add test_performance_with_decimal_precision to verify performance with small decimal values
+- Add test_integration_with_custom_session_backend to verify session backend compatibility
+
 ## v2.4.0
 
-- Add cart_serializable() method for JSON serialization of cart contents
-- Add CartSerializationIntegrationTest class with full serialization test coverage
+- Add Dependabot configuration for automated dependency updates (.github/dependabot.yml)
 - Add CartViewIntegrationTest class for request-level cart operations
 - Add CartSessionIntegrationTest class for session persistence tests
+- Add CartSerializationIntegrationTest class with full serialization test coverage
 - Add CartPerformanceTest class with timing benchmarks for add, summary, and iteration
 - Add CartAdminOperationsTest class for admin changelist, search, and filter operations
-- Improve Cart.__iter__ to return Item instances instead of dicts for consistency
+- Add test_integration.py with 16 integration tests
+- Add test_performance.py with 3 performance benchmark tests
 
 ## v2.3.0
 
