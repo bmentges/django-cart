@@ -18,7 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import models as django_models, transaction
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, RequestFactory
 from django.utils import timezone
 
 from cart.models import Cart as CartModel, Item
@@ -1028,6 +1028,58 @@ class V230EdgeCaseTest(TestCase):
 
         self.assertEqual(item1.product.pk, product1.pk)
         self.assertEqual(item2.product.pk, product2.pk)
+
+
+# ===========================================================================
+# Admin Operations for v2.4.0
+# ===========================================================================
+
+class CartAdminOperationsTest(TestCase):
+    """Test actual Django admin operations."""
+
+    def setUp(self):
+        from django.contrib.admin import site
+        from cart.admin import CartAdmin
+        from django.contrib.auth.models import User
+        self.factory = RequestFactory()
+        self.cart = CartModel.objects.create()
+        self.admin = CartAdmin(CartModel, site)
+        self.superuser = User.objects.create_superuser(
+            username='admin', email='admin@test.com', password='test'
+        )
+
+    def _make_admin_request(self, path, data=None):
+        """Create a request with admin user permissions."""
+        request = self.factory.get(path, data or {})
+        request.session = {}
+        request.user = self.superuser
+        return request
+
+    def test_admin_changelist_view(self):
+        """Admin changelist should return cart objects."""
+        request = self._make_admin_request('/admin/cart/cart/')
+        changelist = self.admin.get_changelist_instance(request)
+        self.assertIsNotNone(changelist)
+
+    def test_admin_search_by_id(self):
+        """Admin search should work by cart ID."""
+        CartModel.objects.all().delete()
+        cart = CartModel.objects.create()
+        request = self._make_admin_request('/admin/cart/cart/', {'q': str(cart.pk)})
+        changelist = self.admin.get_changelist_instance(request)
+        qs = changelist.get_queryset(request)
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().pk, cart.pk)
+
+    def test_admin_filter_by_checked_out(self):
+        """Admin filter should correctly filter by checked_out."""
+        cart1 = CartModel.objects.create(checked_out=False)
+        cart2 = CartModel.objects.create(checked_out=True)
+        request = self._make_admin_request('/admin/cart/cart/', {'checked_out__exact': '1'})
+        changelist = self.admin.get_changelist_instance(request)
+        qs = changelist.get_queryset(request)
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().pk, cart2.pk)
 
 
 # ===========================================================================
