@@ -1892,3 +1892,306 @@ class CartMergeIntegrationTest(TestCase):
 
         cart1.cart.refresh_from_db()
         self.assertEqual(cart1.cart.user, user)
+
+
+# ===========================================================================
+# v2.7.0: Price Validation Tests
+# ===========================================================================
+
+from cart.cart import PriceMismatchError
+
+
+class CartPriceValidationTest(TestCase):
+    """Test price validation feature."""
+
+    def setUp(self):
+        self.request = make_request()
+        self.cart = Cart(self.request)
+        self.product = make_product("PriceValidation", "19.99")
+
+    def test_validate_price_succeeds_when_match(self):
+        """validate_price=True should succeed when price matches."""
+        self.cart.add(
+            self.product,
+            unit_price=Decimal("19.99"),
+            quantity=1,
+            validate_price=True
+        )
+        self.assertEqual(self.cart.count(), 1)
+
+    def test_validate_price_raises_when_mismatch(self):
+        """validate_price=True should raise PriceMismatchError when price differs."""
+        with self.assertRaises(PriceMismatchError):
+            self.cart.add(
+                self.product,
+                unit_price=Decimal("9.99"),
+                quantity=1,
+                validate_price=True
+            )
+
+    def test_validate_price_false_skips_validation(self):
+        """validate_price=False should skip validation."""
+        self.cart.add(
+            self.product,
+            unit_price=Decimal("0.01"),
+            quantity=1,
+            validate_price=False
+        )
+        self.assertEqual(self.cart.count(), 1)
+
+    def test_validate_price_works_on_update(self):
+        """Price validation should work on update as well."""
+        self.cart.add(self.product, Decimal("19.99"), quantity=1, validate_price=False)
+
+        with self.assertRaises(PriceMismatchError):
+            self.cart.update(
+                self.product,
+                quantity=2,
+                unit_price=Decimal("1.00"),
+                validate_price=True
+            )
+
+    def test_validate_price_without_price_attribute(self):
+        """Should skip validation if product has no price attribute."""
+        from tests.test_app.models import FakeProductNoPrice
+
+        product_no_price = FakeProductNoPrice.objects.create(name="NoPriceAttr")
+        self.assertFalse(hasattr(product_no_price, 'price'))
+
+        self.cart.add(
+            product_no_price,
+            Decimal("10.00"),
+            quantity=1,
+            validate_price=True
+        )
+        self.assertEqual(self.cart.count(), 1)
+
+    def test_validate_price_with_zero_price(self):
+        """Price validation should work with zero-priced products."""
+        product = make_product("FreeProduct", "0.00")
+        product.price = Decimal("0.00")
+        product.save()
+
+        self.cart.add(product, Decimal("0.00"), quantity=1, validate_price=True)
+        self.assertEqual(self.cart.count(), 1)
+
+
+# ===========================================================================
+# v2.7.0: Caching Tests
+# ===========================================================================
+
+class CartCachingTest(TestCase):
+    """Test cart caching functionality."""
+
+    def test_summary_is_cached(self):
+        """Second summary() call should use cache."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("CachedSummary")
+        cart.add(product, Decimal("10.00"), quantity=2)
+
+        result1 = cart.summary()
+        cart.cart.items.update(quantity=5)
+        result2 = cart.summary()
+
+        self.assertEqual(result1, result2)
+        self.assertEqual(result2, Decimal("20.00"))
+
+    def test_count_is_cached(self):
+        """Second count() call should use cache."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("CachedCount")
+        cart.add(product, Decimal("10.00"), quantity=2)
+
+        result1 = cart.count()
+        cart.cart.items.update(quantity=5)
+        result2 = cart.count()
+
+        self.assertEqual(result1, result2)
+        self.assertEqual(result2, 2)
+
+    def test_cache_invalidated_on_add(self):
+        """Cache should be invalidated when item is added."""
+        request = make_request()
+        cart = Cart(request)
+
+        summary1 = cart.summary()
+        count1 = cart.count()
+
+        product = make_product("InvalidateAdd")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        summary2 = cart.summary()
+        count2 = cart.count()
+
+        self.assertEqual(summary1, Decimal("0.00"))
+        self.assertEqual(summary2, Decimal("10.00"))
+        self.assertEqual(count1, 0)
+        self.assertEqual(count2, 1)
+
+    def test_cache_invalidated_on_remove(self):
+        """Cache should be invalidated when item is removed."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("InvalidateRemove")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        summary1 = cart.summary()
+        count1 = cart.count()
+        cart.remove(product)
+        summary2 = cart.summary()
+        count2 = cart.count()
+
+        self.assertEqual(summary1, Decimal("10.00"))
+        self.assertEqual(summary2, Decimal("0.00"))
+        self.assertEqual(count1, 1)
+        self.assertEqual(count2, 0)
+
+    def test_cache_invalidated_on_update(self):
+        """Cache should be invalidated when item is updated."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("InvalidateUpdate")
+        cart.add(product, Decimal("10.00"), quantity=1)
+
+        summary1 = cart.summary()
+        count1 = cart.count()
+        cart.update(product, quantity=5)
+        summary2 = cart.summary()
+        count2 = cart.count()
+
+        self.assertEqual(summary1, Decimal("10.00"))
+        self.assertEqual(summary2, Decimal("50.00"))
+        self.assertEqual(count1, 1)
+        self.assertEqual(count2, 5)
+
+    def test_cache_invalidated_on_clear(self):
+        """Cache should be invalidated when cart is cleared."""
+        request = make_request()
+        cart = Cart(request)
+        product = make_product("InvalidateClear")
+        cart.add(product, Decimal("10.00"), quantity=3)
+
+        summary1 = cart.summary()
+        count1 = cart.count()
+        cart.clear()
+        summary2 = cart.summary()
+        count2 = cart.count()
+
+        self.assertEqual(summary1, Decimal("30.00"))
+        self.assertEqual(summary2, Decimal("0.00"))
+        self.assertEqual(count1, 3)
+        self.assertEqual(count2, 0)
+
+    def test_cache_works_with_large_carts(self):
+        """Cache should work efficiently with large carts."""
+        request = make_request()
+        cart = Cart(request)
+
+        for i in range(100):
+            product = make_product(f"LargeCache{i}")
+            cart.add(product, Decimal("10.00"), quantity=1)
+
+        import time
+        start = time.perf_counter()
+        for _ in range(10):
+            cart.summary()
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 0.5)
+
+    def test_cache_isolation_between_carts(self):
+        """Each cart instance should have its own cache."""
+        request1 = make_request()
+        request2 = make_request()
+
+        cart1 = Cart(request1)
+        cart2 = Cart(request2)
+
+        product1 = make_product("Cache1")
+        product2 = make_product("Cache2")
+
+        cart1.add(product1, Decimal("10.00"), quantity=1)
+        cart2.add(product2, Decimal("20.00"), quantity=1)
+
+        self.assertEqual(cart1.summary(), Decimal("10.00"))
+        self.assertEqual(cart2.summary(), Decimal("20.00"))
+
+
+# ===========================================================================
+# v2.7.0: Database Index Tests
+# ===========================================================================
+
+class CartDatabaseIndexTest(TestCase):
+    """Test database indexes."""
+
+    def test_item_has_composite_index(self):
+        """Item model should have composite index."""
+        from cart.models import Item
+
+        indexes = Item._meta.indexes
+        self.assertTrue(len(indexes) > 0, "Item model should have indexes defined")
+
+        composite_index = next(
+            (idx for idx in indexes if idx.fields == ['cart', 'content_type', 'object_id']),
+            None
+        )
+        self.assertIsNotNone(composite_index, "Should have composite index on (cart, content_type, object_id)")
+
+    def test_index_increases_performance(self):
+        """Queries using index should be faster than full scan."""
+        carts = [CartModel.objects.create() for _ in range(10)]
+        products = [make_product(f"IndexProduct{i}") for i in range(50)]
+        ct = ContentType.objects.get_for_model(FakeProduct)
+
+        for cart in carts:
+            for product in products[:5]:
+                Item.objects.create(
+                    cart=cart,
+                    content_type=ct,
+                    object_id=product.pk,
+                    unit_price=Decimal("10.00"),
+                    quantity=1,
+                )
+
+        import time
+        start = time.perf_counter()
+        for _ in range(100):
+            Item.objects.filter(cart=carts[0], content_type=ct)
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 5.0)
+
+
+# ===========================================================================
+# v2.7.0: Integration Tests
+# ===========================================================================
+
+class CartSecurityIntegrationTest(TestCase):
+    """Integration tests for security features."""
+
+    def test_price_validation_in_web_flow(self):
+        """Price validation should work in typical web view flow."""
+        product = make_product("WebPrice", "25.00")
+        product.price = Decimal("25.00")
+        product.save()
+
+        request = make_request()
+        cart = Cart(request)
+
+        def cart_add_view(request, product_id, price):
+            try:
+                prod = FakeProduct.objects.get(pk=product_id)
+                cart.add(prod, price, validate_price=True)
+                return True
+            except PriceMismatchError:
+                return False
+
+        result = cart_add_view(request, product.pk, Decimal("25.00"))
+        self.assertTrue(result)
+
+        request2 = make_request()
+        cart2 = Cart(request2)
+        result = cart_add_view(request2, product.pk, Decimal("15.00"))
+        self.assertFalse(result)

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.7.0
+
+- Add PriceMismatchError exception for price validation security
+- Add validate_price parameter to add() and update() methods
+- Add in-memory caching layer with _cache dict for summary() and count()
+- Add _invalidate_cache() method called on all cart mutations
+- Add composite database index on Item model (cart, content_type, object_id)
+- Add cart/migrations/0004_add_item_indexes.py for database performance
+- Add 16 new tests covering price validation, caching, and database indexes
+
 ## v2.6.1
 
 - Add cart merge functionality with three strategies: 'add' (default), 'replace', 'keep_higher'

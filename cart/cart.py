@@ -41,6 +41,10 @@ class InvalidQuantity(CartException):
     """Raised when a quantity value is invalid (e.g. negative)."""
 
 
+class PriceMismatchError(CartException):
+    """Raised when price doesn't match product's actual price."""
+
+
 class Cart:
     """
     Session-backed shopping cart.
@@ -64,6 +68,7 @@ class Cart:
         if cart is None:
             cart = self._new(request)
         self.cart = cart
+        self._cache: dict = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -76,6 +81,10 @@ class Cart:
 
     def _get_item(self, product) -> models.Item | None:
         return models.Item.objects.filter(cart=self.cart, product=product).first()
+
+    def _invalidate_cache(self) -> None:
+        """Invalidate the summary and count cache."""
+        self._cache = {}
 
     # ------------------------------------------------------------------
     # Iteration / dunder helpers
@@ -94,7 +103,7 @@ class Cart:
     # Public API
     # ------------------------------------------------------------------
 
-    def add(self, product, unit_price: Decimal, quantity: int = 1) -> models.Item:
+    def add(self, product, unit_price: Decimal, quantity: int = 1, validate_price: bool = False) -> models.Item:
         """
         Add *product* to the cart.
 
@@ -104,11 +113,20 @@ class Cart:
         :param product: Any Django model instance.
         :param unit_price: Price per unit as a :class:`~decimal.Decimal`.
         :param quantity: Number of units to add (must be ≥ 1).
+        :param validate_price: If True, validate that unit_price matches product.price.
         :returns: The :class:`~cart.models.Item` that was created or updated.
         :raises InvalidQuantity: if *quantity* is less than 1 or exceeds CART_MAX_QUANTITY_PER_ITEM.
+        :raises PriceMismatchError: if validate_price=True and price doesn't match product.price.
         """
         if int(quantity) < 1:
             raise InvalidQuantity("Quantity must be at least 1.")
+
+        if validate_price:
+            actual_price = getattr(product, 'price', None)
+            if actual_price is not None and unit_price != actual_price:
+                raise PriceMismatchError(
+                    f"Price mismatch: expected {actual_price}, got {unit_price}."
+                )
 
         max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
         if max_qty is not None and int(quantity) > max_qty:
@@ -129,6 +147,7 @@ class Cart:
                     unit_price=unit_price,
                     quantity=int(quantity),
                 )
+        self._invalidate_cache()
         if cart_item_added is not None:
             cart_item_added.send(sender=self.__class__, cart=self.cart, item=item)
         return item
@@ -143,20 +162,33 @@ class Cart:
         if item is None:
             raise ItemDoesNotExist(f"Product {product!r} is not in this cart.")
         item.delete()
+        self._invalidate_cache()
         if cart_item_removed is not None:
             cart_item_removed.send(sender=self.__class__, cart=self.cart, product=product)
 
-    def update(self, product, quantity: int, unit_price: Decimal | None = None) -> models.Item:
+    def update(self, product, quantity: int, unit_price: Decimal | None = None, validate_price: bool = False) -> models.Item:
         """
         Update the quantity (and optionally the unit price) for *product*.
 
         Passing *quantity* = 0 removes the item entirely.
 
+        :param product: Any Django model instance.
+        :param quantity: New quantity (0 = remove item).
+        :param unit_price: New unit price (optional).
+        :param validate_price: If True, validate that unit_price matches product.price.
         :raises ItemDoesNotExist: if the product is not in the cart.
         :raises InvalidQuantity: if *quantity* is negative or exceeds CART_MAX_QUANTITY_PER_ITEM.
+        :raises PriceMismatchError: if validate_price=True and price doesn't match product.price.
         """
         if int(quantity) < 0:
             raise InvalidQuantity("Quantity cannot be negative.")
+
+        if validate_price and unit_price is not None:
+            actual_price = getattr(product, 'price', None)
+            if actual_price is not None and unit_price != actual_price:
+                raise PriceMismatchError(
+                    f"Price mismatch: expected {actual_price}, got {unit_price}."
+                )
 
         max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
         if max_qty is not None and int(quantity) > max_qty:
@@ -169,6 +201,7 @@ class Cart:
 
             if int(quantity) == 0:
                 item.delete()
+                self._invalidate_cache()
                 if cart_item_updated is not None:
                     cart_item_updated.send(sender=self.__class__, cart=self.cart, item=item, deleted=True)
                 return item
@@ -179,14 +212,19 @@ class Cart:
                 item.unit_price = unit_price
                 update_fields.append("unit_price")
             item.save(update_fields=update_fields)
+        self._invalidate_cache()
         if cart_item_updated is not None:
             cart_item_updated.send(sender=self.__class__, cart=self.cart, item=item)
         return item
 
     def count(self) -> int:
         """Return the total number of *units* across all items."""
+        if 'count' in self._cache:
+            return self._cache['count']
         result = self.cart.items.aggregate(total=Sum("quantity"))["total"]
-        return result or 0
+        count = result or 0
+        self._cache['count'] = count
+        return count
 
     def unique_count(self) -> int:
         """Return the number of distinct products in the cart."""
@@ -194,14 +232,19 @@ class Cart:
 
     def summary(self) -> Decimal:
         """Return the grand total price for all items."""
+        if 'summary' in self._cache:
+            return self._cache['summary']
         result = self.cart.items.aggregate(
             total=Sum(F("quantity") * F("unit_price"))
         )["total"]
-        return result or Decimal("0.00")
+        summary = result or Decimal("0.00")
+        self._cache['summary'] = summary
+        return summary
 
     def clear(self) -> None:
         """Remove all items from the cart (but keep the cart record)."""
         self.cart.items.all().delete()
+        self._invalidate_cache()
         if cart_cleared is not None:
             cart_cleared.send(sender=self.__class__, cart=self.cart)
 
@@ -320,6 +363,8 @@ class Cart:
 
             other_cart.clear()
 
+        self._invalidate_cache()
+
     def bind_to_user(self, user) -> None:
         """
         Bind this cart to a user account for persistence.
@@ -386,4 +431,5 @@ class Cart:
                     )
                 result.append(item)
 
+        self._invalidate_cache()
         return result
