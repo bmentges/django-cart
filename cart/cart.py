@@ -45,6 +45,18 @@ class PriceMismatchError(CartException):
     """Raised when price doesn't match product's actual price."""
 
 
+class InvalidDiscountError(CartException):
+    """Raised when a discount code is invalid or cannot be applied."""
+
+
+class InsufficientStock(CartException):
+    """Raised when there is not enough stock for a product."""
+
+
+class MinimumOrderNotMet(CartException):
+    """Raised when cart doesn't meet minimum order amount."""
+
+
 class Cart:
     """
     Session-backed shopping cart.
@@ -103,7 +115,7 @@ class Cart:
     # Public API
     # ------------------------------------------------------------------
 
-    def add(self, product, unit_price: Decimal, quantity: int = 1, validate_price: bool = False) -> models.Item:
+    def add(self, product, unit_price: Decimal, quantity: int = 1, validate_price: bool = False, check_inventory: bool = False) -> models.Item:
         """
         Add *product* to the cart.
 
@@ -114,9 +126,11 @@ class Cart:
         :param unit_price: Price per unit as a :class:`~decimal.Decimal`.
         :param quantity: Number of units to add (must be ≥ 1).
         :param validate_price: If True, validate that unit_price matches product.price.
+        :param check_inventory: If True, check inventory before adding.
         :returns: The :class:`~cart.models.Item` that was created or updated.
         :raises InvalidQuantity: if *quantity* is less than 1 or exceeds CART_MAX_QUANTITY_PER_ITEM.
         :raises PriceMismatchError: if validate_price=True and price doesn't match product.price.
+        :raises InsufficientStock: if check_inventory=True and product is out of stock.
         """
         if int(quantity) < 1:
             raise InvalidQuantity("Quantity must be at least 1.")
@@ -133,8 +147,10 @@ class Cart:
             raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
 
         with transaction.atomic():
+            existing_qty = 0
             item = self._get_item(product)
             if item:
+                existing_qty = item.quantity
                 item.unit_price = unit_price
                 item.quantity += int(quantity)
                 if max_qty is not None and item.quantity > max_qty:
@@ -147,6 +163,16 @@ class Cart:
                     unit_price=unit_price,
                     quantity=int(quantity),
                 )
+
+            if check_inventory:
+                from .inventory import get_inventory_checker
+                checker = get_inventory_checker()
+                total_qty = existing_qty + int(quantity)
+                if not checker.check(product, total_qty):
+                    if item.pk:
+                        item.delete()
+                    raise InsufficientStock(f"Not enough {product} stock available.")
+
         self._invalidate_cache()
         if cart_item_added is not None:
             cart_item_added.send(sender=self.__class__, cart=self.cart, item=item)
@@ -433,3 +459,169 @@ class Cart:
 
         self._invalidate_cache()
         return result
+
+    def discount_amount(self) -> Decimal:
+        """
+        Return the discount amount for the applied discount.
+
+        Returns:
+            Decimal: The discount amount, or Decimal("0.00") if no discount applied.
+        """
+        if self.cart.discount is None:
+            return Decimal("0.00")
+        return self.cart.discount.calculate_discount(self)
+
+    def discount_code(self) -> str | None:
+        """
+        Return the discount code if a discount is applied.
+
+        Returns:
+            str or None: The discount code, or None if no discount applied.
+        """
+        if self.cart.discount is None:
+            return None
+        return self.cart.discount.code
+
+    def apply_discount(self, code: str) -> models.Discount:
+        """
+        Apply a discount code to the cart.
+
+        Args:
+            code: The discount code to apply.
+
+        Returns:
+            The applied Discount instance.
+
+        Raises:
+            InvalidDiscountError: If the code is invalid or cannot be applied.
+
+        Example::
+
+            try:
+                cart.apply_discount("SAVE20")
+            except InvalidDiscountError as e:
+                print(f"Invalid code: {e}")
+        """
+        if self.cart.discount is not None:
+            raise InvalidDiscountError("A discount is already applied to this cart.")
+
+        try:
+            discount = models.Discount.objects.get(code=code)
+        except models.Discount.DoesNotExist:
+            raise InvalidDiscountError(f"Discount code '{code}' does not exist.")
+
+        is_valid, message = discount.is_valid_for_cart(self)
+        if not is_valid:
+            raise InvalidDiscountError(message)
+
+        self.cart.discount = discount
+        self.cart.save(update_fields=["discount"])
+        self._invalidate_cache()
+        return discount
+
+    def remove_discount(self) -> None:
+        """
+        Remove the applied discount from the cart.
+
+        Example::
+
+            cart.remove_discount()
+        """
+        if self.cart.discount is not None:
+            self.cart.discount = None
+            self.cart.save(update_fields=["discount"])
+            self._invalidate_cache()
+
+    def tax(self) -> Decimal:
+        """
+        Calculate tax for the cart using the configured TaxCalculator.
+
+        Returns:
+            Decimal: The calculated tax amount.
+
+        Example::
+
+            tax_amount = cart.tax()
+        """
+        from .tax import get_tax_calculator
+        calculator = get_tax_calculator()
+        return calculator.calculate(self)
+
+    def shipping(self) -> Decimal:
+        """
+        Calculate shipping cost for the cart using the configured ShippingCalculator.
+
+        Returns:
+            Decimal: The calculated shipping cost.
+
+        Example::
+
+            shipping_cost = cart.shipping()
+        """
+        from .shipping import get_shipping_calculator
+        calculator = get_shipping_calculator()
+        return calculator.calculate(self)
+
+    def shipping_options(self) -> list[dict]:
+        """
+        Get available shipping options using the configured ShippingCalculator.
+
+        Returns:
+            list[dict]: List of shipping options with id, name, and price.
+
+        Example::
+
+            options = cart.shipping_options()
+            for option in options:
+                print(f"{option['name']}: ${option['price']}")
+        """
+        from .shipping import get_shipping_calculator
+        calculator = get_shipping_calculator()
+        return calculator.get_options(self)
+
+    def can_checkout(self) -> tuple[bool, str]:
+        """
+        Check if the cart meets checkout requirements.
+
+        Checks:
+        - Cart is not empty
+        - Cart meets minimum order amount (if CART_MIN_ORDER_AMOUNT is set)
+
+        Returns:
+            tuple[bool, str]: (can_checkout, message) where message explains
+            why checkout is not possible, or empty string if it is.
+
+        Example::
+
+            can_checkout, message = cart.can_checkout()
+            if not can_checkout:
+                print(f"Cannot checkout: {message}")
+        """
+        if self.is_empty():
+            return False, "Cart is empty."
+
+        min_amount = getattr(settings, 'CART_MIN_ORDER_AMOUNT', None)
+        if min_amount is not None:
+            if self.summary() < min_amount:
+                return False, f"Minimum order amount is {min_amount}."
+
+        return True, ""
+
+    def total(self) -> Decimal:
+        """
+        Calculate the total cart value including discounts, tax, and shipping.
+
+        Returns:
+            Decimal: The final total amount.
+
+        Example::
+
+            total = cart.total()  # summary - discount + tax + shipping
+        """
+        subtotal = self.summary()
+        discount = self.discount_amount()
+        tax = self.tax()
+        shipping = self.shipping()
+
+        total = subtotal - discount + tax + shipping
+        return max(total, Decimal("0.00"))
