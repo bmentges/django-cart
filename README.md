@@ -16,6 +16,10 @@ A lightweight, session-backed shopping cart for **Django e-commerce applications
 - [Basic Usage](#basic-usage)
 - [API Reference](#api-reference)
 - [Advanced Features](#advanced-features)
+  - [Discounts](#discounts)
+  - [Tax Calculator](#tax-calculator)
+  - [Shipping Calculator](#shipping-calculator)
+  - [Inventory Checker](#inventory-checker)
   - [Cart Merge](#cart-merge)
   - [User Binding](#user-binding)
   - [Bulk Operations](#bulk-operations)
@@ -41,7 +45,7 @@ A lightweight, session-backed shopping cart for **Django e-commerce applications
 | **Atomic Operations** | Safe concurrent cart modifications |
 | **Type Hints** | Full IDE support and static analysis |
 | **Extensible** | Signals, hooks, and custom session adapters |
-| **Production-Ready** | 209 tests, database indexes, cache support |
+| **Production-Ready** | 290 tests, database indexes, cache support |
 
 ---
 
@@ -235,6 +239,127 @@ product in cart        # Same as cart.contains(product)
 ---
 
 ## Advanced Features
+
+### Discounts
+
+Apply discount codes to carts with support for percentage and fixed amount discounts:
+
+```python
+from cart.cart import Cart, InvalidDiscountError
+
+cart = Cart(request)
+
+# Apply a discount code
+cart.apply_discount("SAVE20")  # 20% off
+
+# Check discount info
+discount_amount = cart.discount_amount()  # Decimal("20.00")
+discount_code = cart.discount_code()       # "SAVE20"
+
+# Remove discount
+cart.remove_discount()
+
+# Validation with Discount model
+discount = Discount.objects.get(code="SAVE20")
+is_valid, message = discount.is_valid_for_cart(cart)
+```
+
+Create discounts with various restrictions:
+
+```python
+from cart.models import Discount, DiscountType
+
+discount = Discount.objects.create(
+    code="SUMMER2024",
+    discount_type=DiscountType.PERCENT,
+    value=Decimal("15.00"),        # 15% off
+    min_cart_value=Decimal("50.00"),  # Minimum order
+    max_uses=100,                  # Limited uses
+    valid_from=start_date,
+    valid_until=end_date,
+)
+```
+
+### Tax Calculator
+
+Customize tax calculation for your region:
+
+```python
+# settings.py
+CART_TAX_CALCULATOR = 'myapp.tax.USStateTaxCalculator'
+
+# myapp/tax.py
+from cart.tax import TaxCalculator
+from decimal import Decimal
+
+class USStateTax(TaxCalculator):
+    def calculate(self, cart):
+        subtotal = cart.summary()
+        return subtotal * Decimal("0.0825")  # 8.25% tax
+
+# Usage
+tax = cart.tax()  # Returns Decimal
+```
+
+### Shipping Calculator
+
+Configure shipping options based on cart contents:
+
+```python
+# settings.py
+CART_SHIPPING_CALCULATOR = 'myapp.shipping.FlatRateShipping'
+
+# myapp/shipping.py
+from cart.shipping import ShippingCalculator, ShippingOption
+from decimal import Decimal
+
+class FlatRateShipping(ShippingCalculator):
+    def calculate(self, cart):
+        return Decimal("9.99")
+    
+    def get_options(self, cart):
+        return [
+            {"id": "standard", "name": "Standard Shipping", "price": "9.99"},
+            {"id": "express", "name": "Express Shipping", "price": "19.99"},
+        ]
+
+# Usage
+shipping_cost = cart.shipping()  # Decimal
+options = cart.shipping_options()  # List of shipping options
+```
+
+### Inventory Checker
+
+Validate product availability before adding to cart:
+
+```python
+# settings.py
+CART_INVENTORY_CHECKER = 'myapp.inventory.StockInventoryChecker'
+
+# myapp/inventory.py
+from cart.inventory import InventoryChecker
+
+class StockInventoryChecker(InventoryChecker):
+    def is_available(self, product, quantity):
+        return product.stock >= quantity
+    
+    def reserve(self, product, quantity):
+        product.stock -= quantity
+        product.save()
+    
+    def release(self, product, quantity):
+        product.stock += quantity
+        product.save()
+
+# Usage
+from cart.cart import InsufficientStock
+
+cart = Cart(request)
+try:
+    cart.add(product, price, quantity=10, check_inventory=True)
+except InsufficientStock:
+    print("Not enough stock available")
+```
 
 ### Cart Merge
 

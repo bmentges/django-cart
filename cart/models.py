@@ -29,6 +29,14 @@ class Cart(models.Model):
         blank=True,
         related_name="carts",
     )
+    discount = models.ForeignKey(
+        "Discount",
+        verbose_name=_("applied discount"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_carts",
+    )
 
     class Meta:
         verbose_name = _("cart")
@@ -106,3 +114,118 @@ class Item(models.Model):
     def product(self, product: "Model") -> None:
         self.content_type = ContentType.objects.get_for_model(product._meta.model)
         self.object_id = product.pk
+
+
+class DiscountType(models.TextChoices):
+    PERCENT = "percent", _("Percentage")
+    FIXED = "fixed", _("Fixed Amount")
+
+
+class Discount(models.Model):
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name=_("discount code"),
+        help_text=_("Unique code to apply the discount"),
+    )
+    discount_type = models.CharField(
+        max_length=10,
+        choices=DiscountType.choices,
+        default=DiscountType.PERCENT,
+        verbose_name=_("discount type"),
+    )
+    value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("discount value"),
+        help_text=_("Percentage or fixed amount depending on discount type"),
+    )
+    min_cart_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("minimum cart value"),
+        help_text=_("Minimum cart subtotal required to apply discount"),
+    )
+    max_uses = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("maximum uses"),
+        help_text=_("Maximum number of times this discount can be used (null for unlimited)"),
+    )
+    current_uses = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("current uses"),
+    )
+    active = models.BooleanField(
+        default=True,
+        verbose_name=_("active"),
+        help_text=_("Whether this discount can be used"),
+    )
+    valid_from = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("valid from"),
+    )
+    valid_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("valid until"),
+    )
+
+    class Meta:
+        verbose_name = _("discount")
+        verbose_name_plural = _("discounts")
+
+    def __str__(self) -> str:
+        return f"{self.code} ({self.get_discount_type_display()}: {self.value})"
+
+    def is_valid_for_cart(self, cart: "Cart") -> tuple[bool, str]:
+        """Check if the discount is valid for the given cart.
+        
+        Args:
+            cart: The cart to validate against.
+            
+        Returns:
+            A tuple of (is_valid, message).
+        """
+        if not self.active:
+            return False, "This discount is no longer active."
+
+        if self.max_uses is not None and self.current_uses >= self.max_uses:
+            return False, "This discount has reached its maximum number of uses."
+
+        now = timezone.now()
+        if self.valid_from and now < self.valid_from:
+            return False, "This discount is not yet valid."
+
+        if self.valid_until and now > self.valid_until:
+            return False, "This discount has expired."
+
+        if self.min_cart_value is not None:
+            if cart.summary() < self.min_cart_value:
+                return False, f"Minimum cart value of {self.min_cart_value} required."
+
+        return True, ""
+
+    def calculate_discount(self, cart: "Cart") -> Decimal:
+        """Calculate the discount amount for the given cart.
+        
+        Args:
+            cart: The cart to calculate discount for.
+            
+        Returns:
+            The discount amount as a Decimal.
+        """
+        if self.discount_type == DiscountType.PERCENT:
+            return (cart.summary() * self.value) / Decimal("100")
+        else:
+            return min(self.value, cart.summary())
+
+    def increment_usage(self) -> None:
+        """Increment the usage counter for this discount."""
+        self.current_uses += 1
+        self.save(update_fields=["current_uses"])
