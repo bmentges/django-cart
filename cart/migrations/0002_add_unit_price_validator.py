@@ -1,9 +1,7 @@
 from decimal import Decimal
 
-from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MinValueValidator
 from django.db import migrations, models
-import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
