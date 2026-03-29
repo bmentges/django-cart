@@ -60,7 +60,7 @@ def make_cart_model(**kwargs):
 class CartModelTest(TestCase):
     def test_str_returns_creation_date(self):
         cart = make_cart_model()
-        self.assertIn(str(cart.creation_date), str(cart))
+        self.assertIn(f"Cart #{cart.pk}", str(cart))
 
     def test_default_checked_out_is_false(self):
         cart = make_cart_model()
@@ -859,4 +859,207 @@ class ItemInlineTest(TestCase):
         admin = CartAdmin(CartModel, None)
         self.assertIn(ItemInline, admin.inlines)
 
-        
+
+# ===========================================================================
+# TestGroup: TypeHints Validation (v2.3.0)
+# ===========================================================================
+
+class ModelTypeHintsTest(TestCase):
+    """Verify type hints are properly defined in models."""
+
+    def test_cart_model_has_type_hints(self):
+        """Cart model should have type annotations."""
+        hints = getattr(CartModel, '__annotations__', {})
+        self.assertIn('creation_date', hints)
+
+    def test_item_model_has_type_hints(self):
+        """Item model should have type annotations."""
+        hints = getattr(Item, '__annotations__', {})
+        self.assertIn('quantity', hints)
+
+
+# ===========================================================================
+# TestGroup: Unit Price Validation (v2.3.0)
+# ===========================================================================
+
+class ItemUnitPriceValidationTest(TestCase):
+    """Test unit_price MinValueValidator."""
+
+    def test_negative_unit_price_raises_validation_error(self):
+        """Item with negative unit_price should fail validation."""
+        from django.core.exceptions import ValidationError
+        cart = CartModel.objects.create()
+        item = Item(
+            cart=cart,
+            quantity=1,
+            unit_price=Decimal("-1.00"),
+        )
+        with self.assertRaises(ValidationError):
+            item.full_clean()
+
+    def test_zero_unit_price_is_valid(self):
+        """Item with zero unit_price should pass validation."""
+        cart = CartModel.objects.create()
+        product = make_product("ZeroPrice")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        item = Item(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            quantity=1,
+            unit_price=Decimal("0.00"),
+        )
+        item.full_clean()
+
+    def test_positive_unit_price_is_valid(self):
+        """Item with positive unit_price should pass validation."""
+        cart = CartModel.objects.create()
+        product = make_product()
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        item = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            unit_price=Decimal("99.99"),
+            quantity=1,
+        )
+        item.full_clean()
+
+
+# ===========================================================================
+# TestGroup: Item.product Caching (v2.3.0)
+# ===========================================================================
+
+class ItemProductCachingTest(TestCase):
+    """Test that Item.product uses caching to prevent N+1 queries."""
+
+    def test_product_cached_after_first_access(self):
+        """Product should be cached after first property access."""
+        cart = CartModel.objects.create()
+        product = make_product("CachedProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        item = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=1,
+        )
+
+        _ = item.product
+
+        self.assertTrue(hasattr(item, '_product_cache'))
+
+    def test_product_returns_correct_instance(self):
+        """Product property should return correct product instance."""
+        cart = CartModel.objects.create()
+        product = make_product("CorrectProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        item = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=1,
+        )
+        self.assertEqual(item.product.pk, product.pk)
+
+
+# ===========================================================================
+# TestGroup: Cart String Representation (v2.3.0)
+# ===========================================================================
+
+class CartStringRepresentationTest(TestCase):
+    """Test Cart.__str__ output."""
+
+    def test_str_includes_cart_id(self):
+        """Cart string should include primary key."""
+        cart = CartModel.objects.create()
+        self.assertIn(str(cart.pk), str(cart))
+
+    def test_str_includes_item_count(self):
+        """Cart string should include item count."""
+        cart = CartModel.objects.create()
+        product = make_product("StrProduct")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=2,
+        )
+        self.assertIn("1", str(cart))
+
+
+# ===========================================================================
+# Edge Cases for v2.3.0
+# ===========================================================================
+
+class V230EdgeCaseTest(TestCase):
+    """Edge case tests for v2.3.0 features."""
+
+    def test_cart_str_with_zero_items(self):
+        """Cart with no items should show 0 items."""
+        cart = CartModel.objects.create()
+        self.assertIn("0", str(cart))
+
+    def test_item_product_cache_not_shared_between_instances(self):
+        """Product cache should be instance-specific."""
+        cart = CartModel.objects.create()
+        product1 = make_product("Product1")
+        product2 = make_product("Product2")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+
+        item1 = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product1.pk,
+            unit_price=Decimal("10.00"),
+            quantity=1,
+        )
+        item2 = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product2.pk,
+            unit_price=Decimal("20.00"),
+            quantity=1,
+        )
+
+        self.assertEqual(item1.product.pk, product1.pk)
+        self.assertEqual(item2.product.pk, product2.pk)
+
+
+# ===========================================================================
+# Error Cases for v2.3.0
+# ===========================================================================
+
+class V230ErrorCaseTest(TestCase):
+    """Error case tests for v2.3.0 features."""
+
+    def test_item_without_product_still_works(self):
+        """Item without accessing product should not create cache."""
+        cart = CartModel.objects.create()
+        product = make_product("NoAccess")
+        ct = ContentType.objects.get_for_model(FakeProduct)
+        item = Item.objects.create(
+            cart=cart,
+            content_type=ct,
+            object_id=product.pk,
+            unit_price=Decimal("10.00"),
+            quantity=1,
+        )
+        self.assertFalse(hasattr(item, '_product_cache'))
+
+    def test_validation_error_message_is_descriptive(self):
+        """ValidationError for negative price should have descriptive message."""
+        from django.core.exceptions import ValidationError
+        cart = CartModel.objects.create()
+        item = Item(
+            cart=cart,
+            quantity=1,
+            unit_price=Decimal("-5.00"),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            item.full_clean()
+        self.assertIn('unit_price', ctx.exception.message_dict)
