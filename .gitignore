@@ -45,3 +45,13 @@ docs/_build/
 
 # Env files
 .env
+
+# uv lockfile — library, not application: downstream projects resolve their own
+uv.lock
+
+# pyenv
+.python-version
+
+# Claude Code — keep the project's AI rules, ignore per-machine state
+.claude/*
+!.claude/rules/
