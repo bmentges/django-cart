@@ -18,11 +18,56 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-django",
-    "coverage",
+    "pytest>=8",
+    "pytest-django>=4.8",
+    "coverage[toml]>=7",
 ]
+
+# --------------------------------------------------------------------------- #
+# pytest configuration
+# --------------------------------------------------------------------------- #
+# During the P-1 test overhaul (docs/ROADMAP_2026_04.md) both pytest functions
+# and legacy TestCase subclasses coexist. Phase 8 exit tightens this config:
+#   - add `python_classes = []` to reject TestCase collection
+#   - add `filterwarnings = ["error"]` to fail on unexpected warnings
+# Do not tighten these early — it would break the existing suite mid-migration.
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-python_files = "tests/test_*.py"
+pythonpath = ["."]
+python_files = ["test_*.py"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "slow: tests that take noticeable wall time (deselect with '-m \"not slow\"')",
+]
+
+# --------------------------------------------------------------------------- #
+# Coverage configuration (replaces .coveragerc as of Phase 0)
+# --------------------------------------------------------------------------- #
+
+[tool.coverage.run]
+source = ["cart"]
+branch = true
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false
+# fail_under = 100 — enabled in Phase 8 once behavioural audit is complete
+
+[tool.coverage.html]
+directory = "htmlcov"
