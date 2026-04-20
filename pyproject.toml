@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-cart"
-version = "3.0.2"
+version = "3.0.3"
 authors = [
   { name="Bruno Mentges de Carvalho", email="bruno@mentgesinformatica.com.br" },
 ]
