@@ -2,7 +2,7 @@
 integration via ``CartCookieMiddleware``.
 
 P0-A from docs/ANALYSIS.md: before the middleware existed, setting
-``CARTS_SESSION_ADAPTER_CLASS = "cart.session.CookieSessionAdapter"``
+``CART_SESSION_ADAPTER = "cart.session.CookieSessionAdapter"``
 produced silent data loss — the adapter wrote cookies only to an
 in-memory dict, so the browser never received ``Set-Cookie: CART-ID=…``
 and every request created a fresh ``cart.models.Cart`` row.
@@ -33,7 +33,7 @@ def cookie_adapter_settings(settings):
     ``settings`` fixture watches the setting, not the list object, so
     in-place ``.append()`` wouldn't be restored at teardown.
     """
-    settings.CARTS_SESSION_ADAPTER_CLASS = "cart.session.CookieSessionAdapter"
+    settings.CART_SESSION_ADAPTER = "cart.session.CookieSessionAdapter"
     settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [
         "cart.middleware.CartCookieMiddleware",
     ]

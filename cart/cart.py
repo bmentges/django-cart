@@ -153,13 +153,22 @@ class Cart:
 
     @staticmethod
     def _build_session_adapter(request):
-        """Construct the session adapter named by ``CARTS_SESSION_ADAPTER_CLASS``.
+        """Construct the session adapter named by ``CART_SESSION_ADAPTER``.
 
         Accepts either a dotted import path or a class object. If the
         setting is unset, falls back to :class:`DjangoSessionAdapter`.
         A bad dotted path raises ``ImportError`` — session storage is
         too critical to silently fall back to the default (unlike the
         tax / shipping / inventory factories).
+
+        v3.1.0 renamed this setting from the plural
+        ``CARTS_SESSION_ADAPTER_CLASS`` to the singular
+        ``CART_SESSION_ADAPTER`` — the former was asymmetric with
+        ``CART_TAX_CALCULATOR`` / ``CART_SHIPPING_CALCULATOR`` /
+        ``CART_INVENTORY_CHECKER``. The legacy plural setting is still
+        honoured for back-compat but emits a :class:`DeprecationWarning`
+        pointing at the new name. If both are set, the new singular
+        setting wins and the legacy value is ignored.
 
         The adapter is cached on ``request._cart_session`` so that:
         (a) multiple ``Cart(request)`` constructions within one request
@@ -175,7 +184,22 @@ class Cart:
 
         from .session import DjangoSessionAdapter
 
-        adapter = getattr(settings, "CARTS_SESSION_ADAPTER_CLASS", None)
+        adapter = getattr(settings, "CART_SESSION_ADAPTER", None)
+        if adapter is None:
+            legacy = getattr(settings, "CARTS_SESSION_ADAPTER_CLASS", None)
+            if legacy is not None:
+                import warnings
+
+                warnings.warn(
+                    "`CARTS_SESSION_ADAPTER_CLASS` is deprecated since v3.1.0 "
+                    "and will be removed in v4.0.0. Rename it to "
+                    "`CART_SESSION_ADAPTER` (singular, matching the other "
+                    "`CART_*` settings).",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                adapter = legacy
+
         if adapter is None:
             instance = DjangoSessionAdapter(request)
         else:
@@ -454,6 +478,14 @@ class Cart:
     def checkout(self) -> None:
         """Mark the cart as checked out.
 
+        v3.1.0 enforces :meth:`can_checkout` at the start — an empty
+        cart raises :class:`CartException`, and a cart below
+        ``settings.CART_MIN_ORDER_AMOUNT`` raises
+        :class:`MinimumOrderNotMet`. Callers that used to rely on the
+        lax pre-3.1 behaviour (checkout succeeded on any cart state)
+        need to either call :meth:`can_checkout` themselves before
+        invoking checkout, or catch the new exceptions.
+
         If a discount is applied, revalidates it under a row-level lock
         and atomically increments its ``current_uses`` counter in the
         same transaction. If the discount became invalid between
@@ -473,11 +505,24 @@ class Cart:
         ``self.cart.checked_out`` handles the common case where the
         same facade is called twice.
 
+        :raises CartException: if the cart is empty.
+        :raises MinimumOrderNotMet: if the cart total is below
+            ``settings.CART_MIN_ORDER_AMOUNT``.
         :raises InvalidDiscountError: if an applied discount fails
             revalidation at checkout time.
         """
         if self.cart.checked_out:
             return
+
+        if self.is_empty():
+            raise CartException("Cart is empty.")
+
+        min_amount = getattr(settings, "CART_MIN_ORDER_AMOUNT", None)
+        if min_amount is not None and self.summary() < min_amount:
+            raise MinimumOrderNotMet(
+                f"Cart total {self.summary()} is below the minimum "
+                f"order amount of {min_amount}."
+            )
 
         with transaction.atomic():
             locked_cart = models.Cart.objects.select_for_update().get(pk=self.cart.pk)

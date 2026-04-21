@@ -31,7 +31,7 @@ graph TB
 
     View["Django view<br>or DRF endpoint"]
     Cart["Cart facade<br>cart.cart.Cart"]:::facade
-    Session["Session Adapter<br>CARTS_SESSION_ADAPTER_CLASS"]:::store
+    Session["Session Adapter<br>CART_SESSION_ADAPTER"]:::store
     DB[("Cart, Item, Discount<br>database rows")]:::store
 
     Tax["Tax Calculator<br>CART_TAX_CALCULATOR"]:::plug
@@ -372,12 +372,16 @@ restored = Cart.from_serializable(new_request, payload)
 ### Checkout
 
 ```python
-can, message = cart.can_checkout()
-if not can:
-    return render(request, "cart/detail.html", {"cart": cart, "error": message})
+from cart.cart import CartException, InvalidDiscountError, MinimumOrderNotMet
 
 try:
     cart.checkout()
+except CartException as e:
+    # Empty cart.
+    return render(request, "cart/detail.html", {"cart": cart, "error": str(e)})
+except MinimumOrderNotMet as e:
+    # Subtotal below CART_MIN_ORDER_AMOUNT.
+    return render(request, "cart/detail.html", {"cart": cart, "error": str(e)})
 except InvalidDiscountError as e:
     # A discount was applied earlier but is no longer valid
     # (expired, deactivated, or max_uses reached between apply
@@ -388,6 +392,11 @@ except InvalidDiscountError as e:
 
 `checkout()` is:
 
+- **Validated.** Enforces `can_checkout()` before touching the DB
+  (v3.1.0). An empty cart raises `CartException`; a cart below
+  `settings.CART_MIN_ORDER_AMOUNT` raises `MinimumOrderNotMet`.
+  Pre-v3.1 both were silent no-ops — downstream code had to call
+  `can_checkout()` explicitly.
 - **Atomic.** Marks the cart checked-out and (if a discount is
   applied) increments `Discount.current_uses` in the same
   transaction.
@@ -422,7 +431,7 @@ All cart exceptions subclass `cart.cart.CartException`.
 | `PriceMismatchError` | `validate_price=True` and `unit_price != product.price` |
 | `InsufficientStock` | `check_inventory=True` and the configured `InventoryChecker.check()` returns `False` |
 | `InvalidDiscountError` | bad code, already-applied discount, failed validity check, revalidation failure at checkout |
-| `MinimumOrderNotMet` | defined but not raised by the library itself; surfaced via `can_checkout()` as `(False, message)` |
+| `MinimumOrderNotMet` | raised by `checkout()` when `cart.summary() < settings.CART_MIN_ORDER_AMOUNT` (v3.1.0+) |
 
 ---
 
@@ -674,16 +683,23 @@ flowchart LR
 
 ```python
 # settings.py — dotted string
-CARTS_SESSION_ADAPTER_CLASS = "cart.session.CookieSessionAdapter"
+CART_SESSION_ADAPTER = "cart.session.CookieSessionAdapter"
 
 # or — class object
 from cart.session import CookieSessionAdapter
-CARTS_SESSION_ADAPTER_CLASS = CookieSessionAdapter
+CART_SESSION_ADAPTER = CookieSessionAdapter
 ```
 
 Both forms work. A typo in the dotted path raises `ImportError`
 loudly — this is the one subsystem factory that does **not** fall
 back silently.
+
+> [!note] Migrating from `CARTS_SESSION_ADAPTER_CLASS`
+> v3.1.0 renamed this setting from the plural
+> `CARTS_SESSION_ADAPTER_CLASS` to the singular `CART_SESSION_ADAPTER`
+> for symmetry with the other `CART_*` settings. The legacy name is
+> still honoured but emits a `DeprecationWarning` and will be removed
+> in v4.0. If both are set, the new singular setting wins.
 
 > [!important]
 > `CookieSessionAdapter` (and any custom cookie-backed adapter) also
@@ -741,7 +757,7 @@ class RedisSessionAdapter(CartSessionAdapter):
 
 ```python
 # settings.py
-CARTS_SESSION_ADAPTER_CLASS = "myapp.session.RedisSessionAdapter"
+CART_SESSION_ADAPTER = "myapp.session.RedisSessionAdapter"
 ```
 
 See [`docs/AGENTS.md`](docs/AGENTS.md) for a prompt-ready version
@@ -875,7 +891,7 @@ or `None`.
 | `CART_TAX_CALCULATOR` | dotted path or class | `DefaultTaxCalculator` → `Decimal("0.00")` | Tax calculator class. See [Tax](#tax). |
 | `CART_SHIPPING_CALCULATOR` | dotted path or class | `DefaultShippingCalculator` → `Decimal("0.00")`, one "free" option | Shipping calculator class. See [Shipping](#shipping). |
 | `CART_INVENTORY_CHECKER` | dotted path or class | `DefaultInventoryChecker` → always `True` | Inventory checker class. See [Inventory](#inventory). |
-| `CARTS_SESSION_ADAPTER_CLASS` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). |
+| `CART_SESSION_ADAPTER` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). The legacy `CARTS_SESSION_ADAPTER_CLASS` is still honoured with a `DeprecationWarning` through v3.x. |
 | `CART_MAX_QUANTITY_PER_ITEM` | int or `None` | `None` (unlimited) | Cap on `item.quantity`. Exceeding raises `InvalidQuantity`. |
 | `CART_MIN_ORDER_AMOUNT` | `Decimal` or `None` | `None` (no minimum) | Minimum `cart.summary()` required for `can_checkout()` to return `True`. |
 | `CART_DETAIL_URL_NAME` | str or `None` | `None` | URL name passed to `reverse()` by the `{% cart_link %}` template tag. Falls back to a static `/cart/` when unset or unresolvable. See [Template Tags](#template-tags). |

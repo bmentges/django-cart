@@ -146,7 +146,8 @@ def test_cart_item_updated_carries_deleted_flag_on_zero_quantity(
 # --------------------------------------------------------------------------- #
 
 
-def test_cart_checked_out_fires_on_checkout(cart, signal_sink):
+def test_cart_checked_out_fires_on_checkout(cart, product, signal_sink):
+    cart.add(product, unit_price=Decimal("1.00"))
     cart.checkout()
 
     assert len(signal_sink["checked_out"]) == 1
