@@ -109,19 +109,9 @@ def test_from_serializable_with_empty_data_leaves_cart_untouched(cart, product, 
 
 
 # --------------------------------------------------------------------------- #
-# P0 regression — @xfail until the fix lands
+# P0-1 regression (xfail removed in v3.0.11 — this commit's purpose)
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "P0-1 — Cart.from_serializable is a silent no-op on a fresh cart. "
-        "The method only updates pre-existing items, so on an empty cart "
-        "nothing happens despite the docstring claiming 'restore a cart "
-        "from serializable data'. Scheduled for v3.0.11 (see "
-        "docs/ROADMAP_2026_04.md §P0-1)."
-    ),
-)
 def test_from_serializable_is_not_a_silent_noop_on_fresh_cart(rf_request, product):
     """Calling from_serializable with items on a brand-new cart should
     leave the cart populated. Today it silently returns an empty cart."""
