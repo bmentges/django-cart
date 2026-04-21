@@ -330,21 +330,22 @@ cross-device sync or for passing through an API:
 
 ```python
 payload = cart.cart_serializable()
-# {"42": {"content_type_id": 7, "quantity": 2,
-#         "unit_price": "9.99", "total_price": "19.98"}, ...}
+# {"7:42": {"content_type_id": 7, "object_id": 42, "quantity": 2,
+#           "unit_price": "9.99", "total_price": "19.98"}, ...}
 
 # ...later, possibly in a different request or worker...
 restored = Cart.from_serializable(new_request, payload)
 ```
 
-> [!important] `content_type_id` is required to restore into a fresh cart
-> The payload emitted by `cart_serializable()` includes
-> `content_type_id` per item (added in v3.0.11). This lets
-> `from_serializable()` create items in a brand-new cart. Legacy
-> payloads without the field can still **update** items already
-> present in the target cart, but attempting to create new items
-> from them raises `ValueError` with a clear message — never a
-> silent no-op.
+> [!important] Keys are `"<content_type_id>:<object_id>"`
+> v3.0.13 changed the payload key shape from the bare `str(object_id)`
+> to a composite `"content_type_id:object_id"` so two products with
+> the same primary key across different content types no longer
+> collide. `from_serializable()` accepts both formats — payloads
+> stored before v3.0.13 keep working as long as each value carries
+> `content_type_id`. Consumers that iterated keys to pull `object_id`
+> should switch to reading it from the value (it's now emitted
+> explicitly).
 
 ### Checkout
 

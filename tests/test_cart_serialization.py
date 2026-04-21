@@ -1,9 +1,14 @@
 """Cart serialization: cart_serializable() output + from_serializable() round-trip.
 
-NOTE: `from_serializable` on a fresh cart silently produces an empty cart
-today (P0-1). The behaviour is exercised here with a PRE-POPULATED cart,
-mirroring what the legacy tests did — the fresh-cart bug is owned by
-P0-1 and will get an @xfail regression test in Phase 7.
+As of v3.0.13 (P1-D fix), the payload keys are composites of the form
+``"<content_type_id>:<object_id>"`` — previously the key was the bare
+``object_id`` string, which collided when two product models shared a
+primary key. Values carry ``content_type_id`` and ``object_id``
+explicitly so consumers don't need to parse keys.
+
+``from_serializable`` accepts both the new composite-key format and the
+legacy plain-object_id format, provided the legacy payload carries
+``content_type_id`` in each value (required for the P0-1 contract).
 """
 from __future__ import annotations
 
@@ -17,6 +22,14 @@ from cart.cart import Cart
 pytestmark = pytest.mark.django_db
 
 
+def _composite_key(product) -> str:
+    """Compute the ``cart_serializable`` key for a product instance."""
+    from django.contrib.contenttypes.models import ContentType
+
+    ct = ContentType.objects.get_for_model(product._meta.model)
+    return f"{ct.pk}:{product.pk}"
+
+
 # --------------------------------------------------------------------------- #
 # cart_serializable — structure and content
 # --------------------------------------------------------------------------- #
@@ -26,11 +39,12 @@ def test_cart_serializable_structure(cart, product):
 
     data = cart.cart_serializable()
 
-    key = str(product.pk)
+    key = _composite_key(product)
     assert key in data
     assert data[key]["quantity"] == 2
     assert data[key]["unit_price"] == "15.00"
     assert data[key]["total_price"] == "30.00"
+    assert data[key]["object_id"] == product.pk
 
 
 def test_cart_serializable_on_empty_cart_returns_empty_dict(cart):
@@ -43,7 +57,7 @@ def test_cart_serializable_preserves_unicode_product_names(cart, product_factory
 
     data = cart.cart_serializable()
 
-    assert str(product.pk) in data
+    assert _composite_key(product) in data
 
 
 def test_cart_serializable_serializes_multiple_items(cart, product_factory):
@@ -55,8 +69,8 @@ def test_cart_serializable_serializes_multiple_items(cart, product_factory):
     data = cart.cart_serializable()
 
     assert len(data) == 2
-    assert data[str(p1.pk)]["total_price"] == "5.00"
-    assert data[str(p2.pk)]["total_price"] == "30.00"
+    assert data[_composite_key(p1)]["total_price"] == "5.00"
+    assert data[_composite_key(p2)]["total_price"] == "30.00"
 
 
 def test_cart_serializable_value_types_are_int_and_string(cart, product):
@@ -68,18 +82,22 @@ def test_cart_serializable_value_types_are_int_and_string(cart, product):
     assert isinstance(item_data["quantity"], int)
     assert isinstance(item_data["unit_price"], str)
     assert isinstance(item_data["total_price"], str)
+    assert isinstance(item_data["content_type_id"], int)
+    assert isinstance(item_data["object_id"], int)
 
 
 # --------------------------------------------------------------------------- #
 # from_serializable — updates existing items on same session
 # --------------------------------------------------------------------------- #
 
-def test_from_serializable_updates_existing_items_quantity_and_price(cart, product, rf_request):
+def test_from_serializable_updates_existing_items_quantity_and_price(
+    cart, product, rf_request
+):
     cart.add(product, Decimal("5.00"), quantity=1)
 
     restored = Cart.from_serializable(
         rf_request,
-        {str(product.pk): {"quantity": 10, "unit_price": "15.00"}},
+        {_composite_key(product): {"quantity": 10, "unit_price": "15.00"}},
     )
 
     item = restored.cart.items.first()
@@ -92,7 +110,7 @@ def test_from_serializable_partial_update_keeps_unit_price(cart, product, rf_req
 
     restored = Cart.from_serializable(
         rf_request,
-        {str(product.pk): {"quantity": 5}},
+        {_composite_key(product): {"quantity": 5}},
     )
 
     item = restored.cart.items.first()
@@ -120,8 +138,9 @@ def test_from_serializable_is_not_a_silent_noop_on_fresh_cart(rf_request, produc
 
     ct = ContentType.objects.get_for_model(FakeProduct)
     data = {
-        str(product.pk): {
+        f"{ct.pk}:{product.pk}": {
             "content_type_id": ct.pk,
+            "object_id": product.pk,
             "quantity": 3,
             "unit_price": "15.00",
         }
@@ -147,7 +166,7 @@ def test_cart_serializable_includes_content_type_id(cart, product):
     data = cart.cart_serializable()
 
     ct = ContentType.objects.get_for_model(FakeProduct)
-    assert data[str(product.pk)]["content_type_id"] == ct.pk
+    assert data[_composite_key(product)]["content_type_id"] == ct.pk
 
 
 def test_cart_serializable_and_from_serializable_round_trip(cart, product):
@@ -179,3 +198,85 @@ def test_from_serializable_raises_clear_error_on_legacy_payload(rf_request, prod
 
     with pytest.raises(ValueError, match="content_type_id"):
         Cart.from_serializable(rf_request, legacy_payload)
+
+
+# --------------------------------------------------------------------------- #
+# P1-D: cross-content-type collisions (v3.0.13)
+#
+# Before the fix, two products with the same primary key but different
+# content types collapsed to a single entry on serialize (dict key
+# collision on `str(object_id)`) and updated the wrong item on restore
+# (``Item.objects.filter(cart=..., object_id=...)`` matched either one).
+# See docs/ANALYSIS.md §4.5.
+# --------------------------------------------------------------------------- #
+
+def test_cart_serializable_keeps_both_items_with_same_object_id_across_content_types(
+    cart, rf_request
+):
+    from tests.test_app.models import FakeProduct, FakeProductNoPrice
+
+    p1 = FakeProduct.objects.create(pk=100, name="Physical", price=Decimal("5.00"))
+    p2 = FakeProductNoPrice.objects.create(pk=100, name="Digital")
+    cart.add(p1, Decimal("5.00"), quantity=2)
+    cart.add(p2, Decimal("7.00"), quantity=3)
+
+    data = cart.cart_serializable()
+
+    assert len(data) == 2
+    quantities = sorted(entry["quantity"] for entry in data.values())
+    assert quantities == [2, 3]
+
+
+def test_from_serializable_update_does_not_cross_content_types(cart, rf_request):
+    """Updating the FakeProductNoPrice item by (content_type_id, object_id)
+    must not touch the FakeProduct item that shares its object_id."""
+    from django.contrib.contenttypes.models import ContentType
+    from tests.test_app.models import FakeProduct, FakeProductNoPrice
+
+    p1 = FakeProduct.objects.create(pk=200, name="Physical", price=Decimal("5.00"))
+    p2 = FakeProductNoPrice.objects.create(pk=200, name="Digital")
+    cart.add(p1, Decimal("5.00"), quantity=2)
+    cart.add(p2, Decimal("7.00"), quantity=3)
+
+    ct_p2 = ContentType.objects.get_for_model(FakeProductNoPrice)
+    payload_updating_p2_only = {
+        f"{ct_p2.pk}:200": {
+            "content_type_id": ct_p2.pk,
+            "object_id": 200,
+            "quantity": 9,
+            "unit_price": "7.00",
+        }
+    }
+
+    Cart.from_serializable(rf_request, payload_updating_p2_only)
+
+    ct_p1 = ContentType.objects.get_for_model(FakeProduct)
+    p1_item = cart.cart.items.get(content_type=ct_p1, object_id=200)
+    p2_item = cart.cart.items.get(content_type=ct_p2, object_id=200)
+    assert p1_item.quantity == 2  # unchanged
+    assert p2_item.quantity == 9  # updated
+
+
+def test_from_serializable_accepts_legacy_object_id_keys(rf_request, product):
+    """Back-compat: a payload with a plain ``str(object_id)`` key still
+    restores as long as the value carries ``content_type_id``. Consumers
+    that stored payloads before v3.0.13 must keep working."""
+    from django.contrib.contenttypes.models import ContentType
+    from tests.test_app.models import FakeProduct
+
+    ct = ContentType.objects.get_for_model(FakeProduct)
+    legacy_payload = {
+        str(product.pk): {
+            "content_type_id": ct.pk,
+            "quantity": 4,
+            "unit_price": "12.00",
+        }
+    }
+
+    cart = Cart.from_serializable(rf_request, legacy_payload)
+
+    assert cart.count() == 4
+    item = cart.cart.items.first()
+    assert item.object_id == product.pk
+    assert item.quantity == 4
+    assert item.unit_price == Decimal("12.00")
