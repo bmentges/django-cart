@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import F
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -226,6 +227,15 @@ class Discount(models.Model):
             return min(self.value, cart.summary())
 
     def increment_usage(self) -> None:
-        """Increment the usage counter for this discount."""
-        self.current_uses += 1
-        self.save(update_fields=["current_uses"])
+        """Atomically increment the usage counter by one.
+
+        Uses an ``F()`` expression so concurrent callers never race: two
+        parallel increments always result in ``current_uses += 2``, never
+        ``+= 1`` due to a lost-update.
+
+        The in-memory ``self.current_uses`` attribute is stale after this
+        call — call ``refresh_from_db()`` if you need the new value.
+        """
+        Discount.objects.filter(pk=self.pk).update(
+            current_uses=F("current_uses") + 1
+        )
