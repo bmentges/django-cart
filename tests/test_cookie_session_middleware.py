@@ -122,11 +122,10 @@ def test_middleware_is_noop_when_request_never_constructed_a_cart():
     response — the middleware's guard on ``request._cart_session``
     prevents a crash on the majority of non-cart routes.
 
-    Unit-level rather than HTTP-level: a client-driven version would
-    hit a template-rendering admin route, which trips a pre-existing
-    Py3.14 + Django<6 ``Context.__copy__`` bug (see
-    ``tests/test_cart_admin.py`` for the skip pattern). The guard is
-    fully covered by exercising the middleware directly.
+    Unit-level rather than HTTP-level: driving this through Client +
+    an admin route would couple the test to whichever default handler
+    renders the template, which adds no coverage on top of asserting
+    the guard directly.
     """
     from django.http import HttpResponse
     from django.test import RequestFactory
