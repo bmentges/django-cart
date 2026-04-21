@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- README split into a **Get Started** half and an **Advanced** half
+  with a visible divider in the TOC. The simple path (Installation →
+  Quick Start → Using the Cart → Discounts → Template Tags → Admin →
+  Settings Reference) is now free of warning/important callouts —
+  the one remaining callout in that half is the upfront value-prop
+  tip. All the heavy nuance (concurrency caveats, misconfiguration
+  warnings, cookie-middleware requirement, N+1 avoidance, discount
+  race-safety diagram, serialisation migration story, Python 3.14
+  compatibility matrix) moves into a dedicated Advanced section
+  organised by topic: Architecture, Pluggable Subsystems, Session
+  Storage, Signals, Performance and Concurrency, Serialisation
+  Format, Data Model, Operations, Agent-Ready, Testing,
+  Requirements. No content deleted — only restructured so a
+  first-time reader reaches "working cart" faster.
+
 ### Changed
 - `Cart.tax()`, `Cart.shipping()`, `Cart.discount_amount()`, and
   `Cart.total()` now cache their results on the `Cart` instance

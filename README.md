@@ -7,20 +7,17 @@
 # django-cart
 
 A lightweight, session-backed shopping cart for Django. One thin
-`Cart` facade over one database row, extended through explicit
-pluggable subsystems for tax, shipping, inventory, and session
-storage.
+`Cart` facade over one database row — plus pluggable subsystems for
+tax, shipping, inventory, and session storage when you need them.
 
 > [!tip] Why reach for django-cart
-> - **Prototype-fast.** A working cart in three lines of view code
->   and a `pip install`. No schema changes to your product models.
-> - **Small-store friendly.** Discounts, tax, and shipping ship
->   in-box and plug in through one setting each. Scale out later by
->   swapping the session adapter.
-> - **Agent-ready.** The public API fits in one context window.
->   Coding agents (Claude, Cursor, Copilot) can generate correct
->   extensions on the first pass — see
->   [`docs/AGENTS.md`](docs/AGENTS.md).
+> - **Prototype-fast.** A working cart in three lines of view code and
+>   a `pip install`. No schema changes to your product models.
+> - **Small-store friendly.** Discounts, tax, and shipping ship in-box
+>   and plug in through one setting each.
+> - **Agent-ready.** The public API fits in one context window. Coding
+>   agents (Claude, Cursor, Copilot) can generate correct extensions
+>   on the first pass — see [`docs/AGENTS.md`](docs/AGENTS.md).
 
 ```mermaid
 graph TB
@@ -55,21 +52,28 @@ graph TB
 
 ## Contents
 
+**Get Started**
+
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
 - [Using the Cart](#using-the-cart)
 - [Discounts](#discounts)
+- [Template Tags](#template-tags)
+- [Admin Integration](#admin-integration)
+- [Settings Reference](#settings-reference)
+
+**Advanced**
+
+- [Architecture](#architecture)
 - [Pluggable Subsystems](#pluggable-subsystems)
 - [Session Storage](#session-storage)
 - [Signals](#signals)
-- [Template Tags](#template-tags)
-- [Settings Reference](#settings-reference)
-- [Admin Integration](#admin-integration)
+- [Performance and Concurrency](#performance-and-concurrency)
+- [Serialisation Format](#serialisation-format)
+- [Data Model](#data-model)
 - [Operations](#operations)
 - [Agent-Ready](#agent-ready)
-- [Data Model](#data-model)
-- [Testing](#testing-django-cart)
+- [Testing django-cart](#testing-django-cart)
 - [Requirements](#requirements)
 - [Changelog, Roadmap, License](#changelog-roadmap-license)
 
@@ -81,14 +85,15 @@ graph TB
 pip install django-cart
 ```
 
-Add to `INSTALLED_APPS` and run migrations. The library ships five
-migrations; no product-model changes are required.
+Add the app and run migrations. No changes to your product models are
+required — `django-cart` uses `django.contrib.contenttypes` to attach
+items to any model.
 
 ```python
 # settings.py
 INSTALLED_APPS = [
     # ...
-    "django.contrib.contenttypes",  # already default in Django
+    "django.contrib.contenttypes",  # already a Django default
     "cart",
 ]
 ```
@@ -96,12 +101,6 @@ INSTALLED_APPS = [
 ```bash
 python manage.py migrate cart
 ```
-
-> [!note] About `uv`
-> The maintainer uses [`uv`](https://docs.astral.sh/uv/) for local
-> development of this library. Downstream projects can use any
-> installer (`pip`, `poetry`, `pipenv`, `uv`, `rye`). The public API
-> is installer-agnostic.
 
 ---
 
@@ -149,76 +148,9 @@ def cart_detail(request):
 {% endif %}
 ```
 
-What just happened:
-
-1. `Cart(request)` looked up `CART-ID` in the current session. It
-   did not find one, so it created a new `cart.models.Cart` row and
-   wrote the row id back into the session.
-2. `.add(...)` created a `cart.models.Item` bound to the cart, with
-   a generic foreign key to your `Product` — no changes required to
-   the `Product` model itself.
-3. In the template, iterating `cart` walks items with products
-   prefetched; `cart.summary` returns a `Decimal` sum of all
-   `quantity × unit_price`.
-
----
-
-## Core Concepts
-
-### The `Cart` facade
-
-`cart.cart.Cart` is a thin wrapper around a single
-`cart.models.Cart` row associated with the current session. The
-class holds two pieces of state:
-
-- `self.cart` — the DB row.
-- `self._cache` — an in-memory cache for `count()` and `summary()`,
-  invalidated on every mutation.
-
-No hidden threads, no background work, no module-level registry.
-
-### Items and generic foreign keys
-
-Each `Item` references its product through
-`(content_type, object_id)` — Django's
-[contenttypes framework](https://docs.djangoproject.com/en/stable/ref/contrib/contenttypes/).
-This is what lets `django-cart` work with **any** product model
-without schema changes.
-
-```python
-cart.add(coffee_bean, Decimal("12.00"))        # Coffee model
-cart.add(digital_course, Decimal("99.00"))     # Course model
-# Same cart, different product classes.
-```
-
-### Session-backed lifecycle
-
-```mermaid
-flowchart LR
-    classDef state fill:#0b1220,stroke:#60a5fa,color:#e2e8f0
-    classDef money fill:#0b1220,stroke:#34d399,color:#d1fae5
-    classDef final fill:#1f2937,stroke:#a78bfa,color:#f9fafb,stroke-width:2px
-
-    Empty["Cart(request)<br>empty"]:::state
-    Add["add(product, price)"]:::state
-    Inspect["summary / count /<br>is_empty / iteration"]:::state
-    Discount["apply_discount(code)"]:::money
-    Math["tax() + shipping() −<br>discount_amount() → total()"]:::money
-    Checkout["checkout()<br>atomic, idempotent"]:::final
-
-    Empty --> Add
-    Add --> Inspect
-    Inspect --> Discount
-    Discount --> Math
-    Math --> Checkout
-```
-
-The only thing that lives in the HTTP session is the integer cart
-id. Everything else is a database row. A cart survives page loads
-but does not become an order — that is your checkout flow's
-responsibility. `checkout()` simply marks the cart
-`checked_out=True` and (if a discount was applied) bumps its usage
-counter atomically.
+That's it. `Cart(request)` looks up (or creates) the cart row bound to
+the current session, `.add()` creates a line item with a generic FK to
+your `Product`, and the template iterates items with products preloaded.
 
 ---
 
@@ -231,30 +163,16 @@ from cart.cart import Cart, InvalidQuantity, ItemDoesNotExist
 
 cart = Cart(request)
 
-item = cart.add(product, unit_price=Decimal("12.00"), quantity=2)
-cart.update(product, quantity=5)          # new quantity (0 removes)
+cart.add(product, unit_price=Decimal("12.00"), quantity=2)
+cart.update(product, quantity=5)              # new quantity (0 removes)
 cart.update(product, quantity=3, unit_price=Decimal("9.99"))
-cart.remove(product)                      # raises ItemDoesNotExist
-cart.clear()                              # empties everything
+cart.remove(product)                          # raises ItemDoesNotExist
+cart.clear()                                  # empties everything
 ```
 
-All mutations wrap the DB work in `transaction.atomic()` and
-invalidate the internal summary cache on success.
+All mutations are transactional and invalidate the internal cache.
 
-> [!warning] Concurrency
-> `add()` / `update()` / `merge()` are transactional but do **not**
-> hold row locks during their read phase. Under concurrent requests
-> on Postgres or MySQL, two workers reading `quantity=N` can both
-> write `N+q`, clobbering one of the adds. For code paths that must
-> be concurrent-safe, wrap the mutation in your own
-> `select_for_update()` block or serialise upstream (idempotency
-> keys, queue-per-cart, etc.). `checkout()` already locks the `Cart`
-> row and (when a discount is applied) the `Discount` row via
-> `select_for_update()` — use it as a template.
-
-### Bulk operations
-
-Add or update many items at once, inside a single transaction:
+### Bulk add
 
 ```python
 cart.add_bulk([
@@ -263,63 +181,70 @@ cart.add_bulk([
 ])
 ```
 
-### Iteration and introspection
+### Inspecting the cart
 
 ```python
-len(cart)                 # int — total units (alias of cart.count())
-cart.count()              # int — same as len(cart)
-cart.unique_count()       # int — number of distinct products
-cart.is_empty()           # bool
-product in cart           # bool — uses __contains__
-for item in cart: ...     # iterates items, content_type preloaded
+len(cart)              # total units
+cart.count()           # same as len(cart)
+cart.unique_count()    # number of distinct products
+cart.is_empty()        # bool
+product in cart        # bool
+for item in cart: ...  # iterates items
 ```
 
-Each `item` exposes `.product`, `.quantity`, `.unit_price`,
-`.total_price` (a `Decimal` property).
+Each `item` exposes `.product`, `.quantity`, `.unit_price`, and a
+`.total_price` `Decimal` property.
 
-> [!tip] Avoid the N+1 when rendering line-item tables
-> Plain iteration (`for item in cart`) leaves `item.product` as a
-> lazy property — touching `.product` on each item in a template
-> issues one SELECT per item. For render paths that read the
-> concrete product (name, image, SKU), use
-> `cart.items_with_products()`:
->
-> ```python
-> for item in cart.items_with_products():
->     # item.product is already prefetched — zero extra queries.
->     ...
-> ```
->
-> Batches products by content type under the hood: one SELECT on
-> `Item` plus one `in_bulk` per distinct product model. A 100-item
-> cart split across 3 product models drops from ~100 queries to 4.
+For templates that render every product's name / image / SKU, prefer
+`cart.items_with_products()` — it prefetches the concrete product rows
+in one query per content type. Detail in
+[Performance and Concurrency](#performance-and-concurrency).
 
 ### Money math
 
 ```python
-cart.summary()            # Decimal — Σ quantity × unit_price
-cart.tax()                # Decimal — uses configured TaxCalculator
-cart.shipping()           # Decimal — uses configured ShippingCalculator
-cart.discount_amount()    # Decimal — 0.00 if no discount applied
-cart.total()              # Decimal — summary − discount + tax + shipping
+cart.summary()          # Decimal — Σ quantity × unit_price
+cart.tax()              # Decimal — uses configured TaxCalculator
+cart.shipping()         # Decimal — uses configured ShippingCalculator
+cart.discount_amount()  # Decimal — 0.00 if no discount applied
+cart.total()            # Decimal — summary − discount + tax + shipping (2dp)
 ```
 
-All six methods above — `summary()`, `count()`, `tax()`, `shipping()`,
-`discount_amount()`, `total()` — are cached on the `Cart` instance
-and invalidated on every mutation. A template that renders subtotal
-+ tax + shipping + discount + total calls each configured calculator
-exactly once per request, not once per displayed field.
+All six values are cached on the `Cart` instance and invalidated on
+every mutation, so a template that renders subtotal + tax + shipping +
+discount + total doesn't pay for re-computation or repeated calculator
+calls.
 
-### User binding and merging
+### Checkout
 
-Bind a guest cart to a user on login, and merge the guest cart into
-any pre-existing user cart:
+```python
+from cart.cart import CartException, InvalidDiscountError, MinimumOrderNotMet
+
+try:
+    cart.checkout()
+except CartException:
+    ...  # empty cart
+except MinimumOrderNotMet:
+    ...  # below settings.CART_MIN_ORDER_AMOUNT
+except InvalidDiscountError:
+    ...  # applied discount became invalid between apply and checkout
+```
+
+`checkout()` marks the cart `checked_out=True`. It's atomic,
+idempotent (safe to retry), and race-safe at the `Cart` and `Discount`
+row level — see [Performance and
+Concurrency](#performance-and-concurrency) for the full model.
+Inventory reservation is intentionally your own flow's job.
+
+### User binding (on login)
+
+Bind a guest cart to a user, and merge against any existing user cart:
 
 ```python
 from cart.cart import Cart
 
 def on_login(request):
-    guest = Cart(request)                 # the current session cart
+    guest = Cart(request)
     prior = Cart.get_active_user_carts(request.user).first()
 
     if prior is None:
@@ -331,14 +256,10 @@ def on_login(request):
     user_cart.merge(guest, strategy="add")   # or "replace" / "keep_higher"
 ```
 
-> [!note] `get_user_carts()` vs `get_active_user_carts()`
-> Use `get_active_user_carts(user)` for login-merge flows — it pre-filters
-> `checked_out=False`, so a forgotten `.filter(…)` can't silently
-> resurrect items from a past order. Use `get_user_carts(user)` when
-> you genuinely need every cart the user has ever had (order history,
-> admin dashboards).
-
-Available merge strategies:
+Use `get_active_user_carts()` for login/merge flows — it filters to
+`checked_out=False` so you can't accidentally merge a past order.
+`get_user_carts()` returns the full history (for order lists, admin
+dashboards).
 
 | Strategy | Result per product |
 |----------|--------------------|
@@ -346,80 +267,19 @@ Available merge strategies:
 | `replace` | `quantity = new` |
 | `keep_higher` | `quantity = max(old, new)` |
 
-### Serialisation
+### Save and restore
 
-Freeze a cart to a JSON-safe dict and restore it later — useful for
-cross-device sync or for passing through an API:
+Freeze a cart to a JSON-safe dict and restore it on another request or
+worker:
 
 ```python
 payload = cart.cart_serializable()
-# {"7:42": {"content_type_id": 7, "object_id": 42, "quantity": 2,
-#           "unit_price": "9.99", "total_price": "19.98"}, ...}
-
-# ...later, possibly in a different request or worker...
 restored = Cart.from_serializable(new_request, payload)
 ```
 
-> [!important] Keys are `"<content_type_id>:<object_id>"`
-> v3.0.13 changed the payload key shape from the bare `str(object_id)`
-> to a composite `"content_type_id:object_id"` so two products with
-> the same primary key across different content types no longer
-> collide. `from_serializable()` accepts both formats — payloads
-> stored before v3.0.13 keep working as long as each value carries
-> `content_type_id`. Consumers that iterated keys to pull `object_id`
-> should switch to reading it from the value (it's now emitted
-> explicitly).
-
-### Checkout
-
-```python
-from cart.cart import CartException, InvalidDiscountError, MinimumOrderNotMet
-
-try:
-    cart.checkout()
-except CartException as e:
-    # Empty cart.
-    return render(request, "cart/detail.html", {"cart": cart, "error": str(e)})
-except MinimumOrderNotMet as e:
-    # Subtotal below CART_MIN_ORDER_AMOUNT.
-    return render(request, "cart/detail.html", {"cart": cart, "error": str(e)})
-except InvalidDiscountError as e:
-    # A discount was applied earlier but is no longer valid
-    # (expired, deactivated, or max_uses reached between apply
-    # and checkout). The whole operation rolled back — the cart
-    # is still open, the user can remove the discount and retry.
-    ...
-```
-
-`checkout()` is:
-
-- **Validated.** Enforces `can_checkout()` before touching the DB
-  (v3.1.0). An empty cart raises `CartException`; a cart below
-  `settings.CART_MIN_ORDER_AMOUNT` raises `MinimumOrderNotMet`.
-  Pre-v3.1 both were silent no-ops — downstream code had to call
-  `can_checkout()` explicitly.
-- **Atomic.** Marks the cart checked-out and (if a discount is
-  applied) increments `Discount.current_uses` in the same
-  transaction.
-- **Race-safe.** Takes a `SELECT … FOR UPDATE` on the `Cart` row
-  first, then (when a discount is applied) on the `Discount` row.
-  Two concurrent checkouts of the same cart produce exactly one
-  counter increment; two concurrent checkouts of the last remaining
-  use of a discount code result in one success and one
-  `InvalidDiscountError`.
-- **Idempotent across facades.** Calling `checkout()` twice on the
-  same cart — even from separate `Cart(request)` instances or
-  workers with stale in-memory state — is a no-op on the second
-  call. No second counter bump, no duplicate `cart_checked_out`
-  signal.
-
-> [!note] `checkout()` does not reserve inventory
-> Stock reservation is the consuming project's responsibility. The
-> `InventoryChecker` interface has a `reserve()` method you can call
-> from your own checkout flow; the library's built-in `checkout()`
-> does not call it. This is deliberate — reservation semantics
-> (timeout, release on failed payment, retry) vary too much per
-> project to bake a default.
+The applied discount code round-trips automatically. Format details and
+the v3.0.13 key migration story are in
+[Serialisation Format](#serialisation-format).
 
 ### Exceptions
 
@@ -432,7 +292,7 @@ All cart exceptions subclass `cart.cart.CartException`.
 | `PriceMismatchError` | `validate_price=True` and `unit_price != product.price` |
 | `InsufficientStock` | `check_inventory=True` and the configured `InventoryChecker.check()` returns `False` |
 | `InvalidDiscountError` | bad code, already-applied discount, failed validity check, revalidation failure at checkout |
-| `MinimumOrderNotMet` | raised by `checkout()` when `cart.summary() < settings.CART_MIN_ORDER_AMOUNT` (v3.1.0+) |
+| `MinimumOrderNotMet` | `cart.summary() < settings.CART_MIN_ORDER_AMOUNT` at checkout |
 
 ---
 
@@ -472,54 +332,183 @@ cart.discount_amount()     # Decimal — computed against cart.summary()
 cart.remove_discount()
 ```
 
-### How usage caps are enforced
+`apply_discount()` validates the code (active, within its window, under
+its usage cap, meets `min_cart_value`). `checkout()` re-validates under
+a row-level lock and increments the usage counter atomically. Two
+concurrent checkouts of the last available use result in exactly one
+success and one `InvalidDiscountError`. See [Performance and
+Concurrency](#performance-and-concurrency) for the full flow.
 
-```mermaid
-sequenceDiagram
-    participant V as View
-    participant C as Cart
-    participant DB as Database
+---
 
-    V->>C: apply_discount("SUMMER25")
-    C->>DB: Discount.objects.get(code=...)
-    C->>C: discount.is_valid_for_cart(self)
-    C->>DB: cart.discount = discount
+## Template Tags
 
-    Note over V,DB: Some time passes — user browses, adds items,<br>another user may also be checking out the last use.
-
-    V->>C: checkout()
-    C->>DB: BEGIN
-    C->>DB: SELECT ... FROM Cart WHERE pk=? FOR UPDATE
-
-    alt cart already checked_out<br>(another facade won the race)
-        C->>DB: COMMIT
-        C-->>V: ok (no-op)
-    else proceed
-        C->>DB: SELECT ... FROM Discount WHERE pk=? FOR UPDATE
-        C->>C: discount.is_valid_for_cart(self)
-
-        alt still valid
-            C->>DB: UPDATE Discount SET current_uses = current_uses + 1
-            C->>DB: UPDATE Cart SET checked_out = true
-            C->>DB: COMMIT
-            C-->>V: ok
-        else no longer valid<br>(expired, deactivated, cap reached)
-            C->>DB: ROLLBACK
-            C-->>V: raises InvalidDiscountError
-        end
-    end
+```django
+{% load cart_tags %}
 ```
 
-Two concurrent checkouts of the last remaining use of a discount
-code result in exactly one success and exactly one
-`InvalidDiscountError`. The counter is never exceeded.
+| Tag | Signature | Returns |
+|-----|-----------|---------|
+| `{% cart_item_count %}` | no arguments | integer |
+| `{% cart_summary %}` | no arguments | formatted string, e.g. `$19.98` |
+| `{% cart_is_empty %}` | no arguments | boolean |
+| `{% cart_link "Label" "css-class" %}` | `text`, `css_class` — both optional | HTML `<a>` tag |
+
+All four tags declare `takes_context=True` and read `request` from the
+template context (enabled by default when
+`django.template.context_processors.request` is in `TEMPLATES → OPTIONS
+→ context_processors`). Do not pass `request` positionally.
+
+Typical header use:
+
+```django
+{% load cart_tags %}
+
+<header>
+  <nav>
+    <a href="/">Shop</a>
+    {% cart_link "Cart" "nav-btn" %}
+    <span class="badge">{% cart_item_count %}</span>
+    <span class="total">{% cart_summary %}</span>
+  </nav>
+</header>
+```
+
+The read-only tags (`cart_item_count`, `cart_summary`, `cart_is_empty`)
+query the session directly — they do **not** create a cart row for
+crawlers, bots, or logged-out visitors. `cart_link` resolves its URL
+via `reverse(CART_DETAIL_URL_NAME)` when that setting is defined, and
+falls back to a static `/cart/` otherwise.
+
+Capture a value with `as`:
+
+```django
+{% cart_item_count as count %}
+{% if count %}
+  <span class="badge">{{ count }}</span>
+{% endif %}
+```
+
+---
+
+## Admin Integration
+
+`cart/admin.py` registers `Cart` with an inline `Item` editor, so you
+can inspect a cart and its line items from one admin page. `Item` is
+not registered as a top-level model (by design).
+
+The `Discount` model is not registered by the library — storefronts
+usually want a custom admin (bulk CSV import, campaign grouping,
+voucher generators). Drop this in your own project:
+
+```python
+# myapp/admin.py
+from django.contrib import admin
+from cart.models import Discount
+
+
+@admin.register(Discount)
+class DiscountAdmin(admin.ModelAdmin):
+    list_display = ("code", "discount_type", "value",
+                    "current_uses", "max_uses", "active",
+                    "valid_until")
+    list_filter = ("active", "discount_type")
+    search_fields = ("code",)
+    readonly_fields = ("current_uses",)
+```
+
+---
+
+## Settings Reference
+
+All settings are optional. Defaults apply when a setting is absent or
+`None`.
+
+| Setting | Type | Default | Purpose |
+|---------|------|---------|---------|
+| `CART_TAX_CALCULATOR` | dotted path or class | `DefaultTaxCalculator` → `Decimal("0.00")` | Tax calculator class. See [Pluggable Subsystems](#pluggable-subsystems). |
+| `CART_SHIPPING_CALCULATOR` | dotted path or class | `DefaultShippingCalculator` → `Decimal("0.00")`, one "free" option | Shipping calculator class. |
+| `CART_INVENTORY_CHECKER` | dotted path or class | `DefaultInventoryChecker` → always `True` | Inventory checker class. |
+| `CART_SESSION_ADAPTER` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). The legacy `CARTS_SESSION_ADAPTER_CLASS` is still honoured with a `DeprecationWarning` through v3.x. |
+| `CART_MAX_QUANTITY_PER_ITEM` | int or `None` | `None` (unlimited) | Cap on `item.quantity`. Exceeding raises `InvalidQuantity`. |
+| `CART_MIN_ORDER_AMOUNT` | `Decimal` or `None` | `None` (no minimum) | Minimum `cart.summary()` required for `checkout()` to succeed; below it, `checkout()` raises `MinimumOrderNotMet`. |
+| `CART_DETAIL_URL_NAME` | str or `None` | `None` | URL name passed to `reverse()` by `{% cart_link %}`. Falls back to a static `/cart/` when unset or unresolvable. |
+
+---
+
+## Advanced
+
+Everything below covers internals, extension points, operational
+concerns, and edge cases. The sections above are enough to use
+`django-cart` for common cases; reach here when you need to plug in
+custom tax/shipping/inventory, wire custom session storage, understand
+the concurrency model, or contribute to the library.
+
+---
+
+## Architecture
+
+### The `Cart` facade
+
+`cart.cart.Cart` is a thin wrapper around a single `cart.models.Cart`
+row associated with the current session. The class holds two pieces
+of state:
+
+- `self.cart` — the DB row.
+- `self._cache` — an in-memory cache for `count()`, `summary()`,
+  `tax()`, `shipping()`, `discount_amount()`, and `total()`,
+  invalidated on every mutation.
+
+No hidden threads, no background work, no module-level registry.
+
+### Items and generic foreign keys
+
+Each `Item` references its product through `(content_type, object_id)`
+— Django's
+[contenttypes framework](https://docs.djangoproject.com/en/stable/ref/contrib/contenttypes/).
+This is what lets `django-cart` work with **any** product model
+without schema changes.
+
+```python
+cart.add(coffee_bean, Decimal("12.00"))        # Coffee model
+cart.add(digital_course, Decimal("99.00"))     # Course model
+# Same cart, different product classes.
+```
+
+### Session-backed lifecycle
+
+```mermaid
+flowchart LR
+    classDef state fill:#0b1220,stroke:#60a5fa,color:#e2e8f0
+    classDef money fill:#0b1220,stroke:#34d399,color:#d1fae5
+    classDef final fill:#1f2937,stroke:#a78bfa,color:#f9fafb,stroke-width:2px
+
+    Empty["Cart(request)<br>empty"]:::state
+    Add["add(product, price)"]:::state
+    Inspect["summary / count /<br>is_empty / iteration"]:::state
+    Discount["apply_discount(code)"]:::money
+    Math["tax() + shipping() −<br>discount_amount() → total()"]:::money
+    Checkout["checkout()<br>atomic, idempotent"]:::final
+
+    Empty --> Add
+    Add --> Inspect
+    Inspect --> Discount
+    Discount --> Math
+    Math --> Checkout
+```
+
+The only thing that lives in the HTTP session is the integer cart id.
+Everything else is a database row. A cart survives page loads but does
+not become an order — that is your checkout flow's responsibility.
+`checkout()` marks the cart `checked_out=True` and (if a discount was
+applied) bumps its usage counter atomically.
 
 ---
 
 ## Pluggable Subsystems
 
-Tax, shipping, and inventory checking each follow the same shape:
-an abstract base class, a no-op default, and a factory that reads a
+Tax, shipping, and inventory checking each follow the same shape: an
+abstract base class, a no-op default, and a factory that reads a
 dotted path from settings.
 
 ```
@@ -530,14 +519,14 @@ cart/<subsystem>.py:
 ```
 
 > [!warning] Fallback on misconfiguration is a `RuntimeWarning`
-> A bad dotted path in `CART_TAX_CALCULATOR`, `CART_SHIPPING_CALCULATOR`,
-> or `CART_INVENTORY_CHECKER` falls back to the default implementation
-> rather than raising — but each factory now emits a
-> `RuntimeWarning` naming the setting, the bad path, and the
-> underlying `ImportError` / `AttributeError`. Promote those to
-> errors in dev with `python -W error::RuntimeWarning` or Django's
-> logging config. The session adapter factory is still the strict
-> exception — it raises `ImportError` loudly.
+> A bad dotted path in `CART_TAX_CALCULATOR`,
+> `CART_SHIPPING_CALCULATOR`, or `CART_INVENTORY_CHECKER` falls back
+> to the default implementation rather than raising — but each factory
+> emits a `RuntimeWarning` naming the setting, the bad path, and the
+> underlying `ImportError` / `AttributeError`. Promote those to errors
+> in dev with `python -W error::RuntimeWarning` or Django's logging
+> config. The session-adapter factory is the strict exception: it
+> raises `ImportError` loudly.
 
 ### Tax
 
@@ -564,14 +553,13 @@ Usage:
 cart.tax()   # → Decimal
 ```
 
-The default (`DefaultTaxCalculator`) always returns
-`Decimal("0.00")`.
+The default (`DefaultTaxCalculator`) always returns `Decimal("0.00")`.
 
 ### Shipping
 
-`ShippingCalculator` has two methods: `calculate(cart)` for the
-total cost, and `get_options(cart)` for the UI to show the user a
-list of choices.
+`ShippingCalculator` has two methods: `calculate(cart)` for the total
+cost, and `get_options(cart)` for the UI to show the user a list of
+choices.
 
 ```python
 # settings.py
@@ -641,16 +629,16 @@ except InsufficientStock:
 
 The default (`DefaultInventoryChecker`) always returns `True`.
 `reserve()` is a method you call from your own checkout flow; the
-library's `checkout()` does not call it — see the [Checkout
-note](#checkout) above.
+library's `checkout()` does not call it — see
+[Performance and Concurrency](#performance-and-concurrency).
 
 ---
 
 ## Session Storage
 
 The only state the library puts in the HTTP session is the integer
-`CART-ID`. Everything else is a database row. Which backend holds
-that integer is configurable via a single setting.
+`CART-ID`. Everything else is a database row. Which backend holds that
+integer is configurable via a single setting.
 
 ```mermaid
 flowchart LR
@@ -692,21 +680,14 @@ CART_SESSION_ADAPTER = CookieSessionAdapter
 ```
 
 Both forms work. A typo in the dotted path raises `ImportError`
-loudly — this is the one subsystem factory that does **not** fall
-back silently.
+loudly — this is the one subsystem factory that does **not** fall back
+silently.
 
-> [!note] Migrating from `CARTS_SESSION_ADAPTER_CLASS`
-> v3.1.0 renamed this setting from the plural
-> `CARTS_SESSION_ADAPTER_CLASS` to the singular `CART_SESSION_ADAPTER`
-> for symmetry with the other `CART_*` settings. The legacy name is
-> still honoured but emits a `DeprecationWarning` and will be removed
-> in v4.0. If both are set, the new singular setting wins.
-
-> [!important]
-> `CookieSessionAdapter` (and any custom cookie-backed adapter) also
-> requires `CartCookieMiddleware` in `MIDDLEWARE` so pending cookies
-> are written to the response. `DjangoSessionAdapter` (the default)
-> does not need this — Django's `SessionMiddleware` handles it.
+> [!important] `CookieSessionAdapter` requires `CartCookieMiddleware`
+> Any cookie-backed adapter needs `CartCookieMiddleware` in
+> `MIDDLEWARE` so pending cookies are written to the response.
+> `DjangoSessionAdapter` (the default) does not — Django's
+> `SessionMiddleware` handles it.
 >
 > ```python
 > MIDDLEWARE = [
@@ -715,12 +696,17 @@ back silently.
 > ]
 > ```
 
+> [!note] Migrating from `CARTS_SESSION_ADAPTER_CLASS`
+> v3.1.0 renamed this setting from the plural
+> `CARTS_SESSION_ADAPTER_CLASS` to the singular `CART_SESSION_ADAPTER`
+> for symmetry with the other `CART_*` settings. The legacy name is
+> still honoured but emits a `DeprecationWarning` and will be removed
+> in v4.0. If both are set, the new singular setting wins.
+
 ### Custom adapter
 
-Subclass `CartSessionAdapter` and implement its five abstract
-methods. The real interface is `get` / `set` / `delete` /
-`get_or_create_cart_id` / `set_cart_id` — each documented on the
-base class.
+Subclass `CartSessionAdapter` and implement its five abstract methods:
+`get` / `set` / `delete` / `get_or_create_cart_id` / `set_cart_id`.
 
 ```python
 # myapp/session.py
@@ -761,8 +747,8 @@ class RedisSessionAdapter(CartSessionAdapter):
 CART_SESSION_ADAPTER = "myapp.session.RedisSessionAdapter"
 ```
 
-See [`docs/AGENTS.md`](docs/AGENTS.md) for a prompt-ready version
-of this pattern.
+See [`docs/AGENTS.md`](docs/AGENTS.md) for a prompt-ready version of
+this pattern.
 
 ---
 
@@ -770,8 +756,8 @@ of this pattern.
 
 Five optional signals let you observe cart events without
 monkey-patching. Importing `cart.signals` is not required — if the
-module is missing at import time, the cart still works and no
-signals fire.
+module is missing at import time, the cart still works and no signals
+fire.
 
 | Signal | Payload (`kwargs`) | Fired by |
 |--------|---------------------|----------|
@@ -814,191 +800,144 @@ def send_confirmation(sender, cart, **kwargs):
 
 ---
 
-## Template Tags
+## Performance and Concurrency
 
-Load once per template, then use in any context that has `request`
-(the default Django context processor makes this automatic if
-`django.template.context_processors.request` is in `TEMPLATES →
-OPTIONS → context_processors`).
+### Cached money-math methods
 
-```django
-{% load cart_tags %}
-```
+All six price-related methods — `summary()`, `count()`, `tax()`,
+`shipping()`, `discount_amount()`, `total()` — are cached on the
+`Cart` instance and cleared by `_invalidate_cache()` on every
+mutation (`add`, `update`, `remove`, `clear`, `apply_discount`,
+`remove_discount`, `merge`, checkout). A request-scoped render that
+touches each method multiple times invokes the configured calculators
+exactly once per `Cart` instance. For a typical tax calculator hitting
+a remote API (Stripe Tax, Avalara, TaxJar), this cuts round-trips from
+N to 1.
 
-| Tag | Signature | Returns |
-|-----|-----------|---------|
-| `{% cart_item_count %}` | no arguments | integer |
-| `{% cart_summary %}` | no arguments | formatted string, e.g. `$19.98` |
-| `{% cart_is_empty %}` | no arguments | boolean |
-| `{% cart_link "Label" "css-class" %}` | `text`, `css_class` — both optional | HTML `<a>` tag |
+### Avoiding the N+1 on `.product`
 
-All four tags declare `takes_context=True` and read `request` from
-the template context. Do not pass `request` positionally.
-
-> [!note] Tags do not create abandoned cart rows
-> The three read-only tags (`cart_item_count`, `cart_summary`,
-> `cart_is_empty`) query the cart directly from the DB when the
-> session already carries a `CART-ID`, and return defaults otherwise.
-> `cart_link` never queries the cart at all. Loading any of these in
-> a site-wide header is safe to serve to crawlers, bots, and
-> pre-login visitors — none of them will materialise a DB row.
-
-> [!tip] Route `cart_link` through your own URL conf
-> Set `CART_DETAIL_URL_NAME` to a URL name you've defined, and
-> `cart_link` will resolve the anchor via `reverse()`:
->
-> ```python
-> # settings.py
-> CART_DETAIL_URL_NAME = "cart_detail"
-> ```
->
-> With the setting absent — or the URL name unresolvable — the tag
-> falls back to a static `/cart/`. The cart's integer primary key is
-> never embedded in the URL.
-
-Example header snippet:
-
-```django
-{% load cart_tags %}
-
-<header>
-  <nav>
-    <a href="/">Shop</a>
-    {% cart_link "Cart" "nav-btn" %}
-    <span class="badge">{% cart_item_count %}</span>
-    <span class="total">{% cart_summary %}</span>
-  </nav>
-</header>
-```
-
-Capture a tag's return value with `as`:
-
-```django
-{% cart_item_count as count %}
-{% if count %}
-  <span class="badge">{{ count }}</span>
-{% endif %}
-```
-
----
-
-## Settings Reference
-
-All settings are optional. Defaults apply when a setting is absent
-or `None`.
-
-| Setting | Type | Default | Purpose |
-|---------|------|---------|---------|
-| `CART_TAX_CALCULATOR` | dotted path or class | `DefaultTaxCalculator` → `Decimal("0.00")` | Tax calculator class. See [Tax](#tax). |
-| `CART_SHIPPING_CALCULATOR` | dotted path or class | `DefaultShippingCalculator` → `Decimal("0.00")`, one "free" option | Shipping calculator class. See [Shipping](#shipping). |
-| `CART_INVENTORY_CHECKER` | dotted path or class | `DefaultInventoryChecker` → always `True` | Inventory checker class. See [Inventory](#inventory). |
-| `CART_SESSION_ADAPTER` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). The legacy `CARTS_SESSION_ADAPTER_CLASS` is still honoured with a `DeprecationWarning` through v3.x. |
-| `CART_MAX_QUANTITY_PER_ITEM` | int or `None` | `None` (unlimited) | Cap on `item.quantity`. Exceeding raises `InvalidQuantity`. |
-| `CART_MIN_ORDER_AMOUNT` | `Decimal` or `None` | `None` (no minimum) | Minimum `cart.summary()` required for `can_checkout()` to return `True`. |
-| `CART_DETAIL_URL_NAME` | str or `None` | `None` | URL name passed to `reverse()` by the `{% cart_link %}` template tag. Falls back to a static `/cart/` when unset or unresolvable. See [Template Tags](#template-tags). |
-
----
-
-## Admin Integration
-
-`cart/admin.py` registers `Cart` with an inline `Item` editor.
-`Item` is visible through the cart edit page — not as a top-level
-model — which matches how you typically want to inspect a cart.
-
-> [!note] `Discount` is not registered
-> The `Discount` model is intentionally not registered in the
-> library's admin, because a storefront often wants custom admin
-> views (bulk CSV import, per-campaign grouping, voucher
-> generators). Register it yourself:
->
-> ```python
-> # myapp/admin.py
-> from django.contrib import admin
-> from cart.models import Discount
->
->
-> @admin.register(Discount)
-> class DiscountAdmin(admin.ModelAdmin):
->     list_display = ("code", "discount_type", "value",
->                     "current_uses", "max_uses", "active",
->                     "valid_until")
->     list_filter = ("active", "discount_type")
->     search_fields = ("code",)
->     readonly_fields = ("current_uses",)
-> ```
-
----
-
-## Operations
-
-### Pruning abandoned carts
-
-Abandoned carts accumulate. The `clean_carts` management command
-removes them:
-
-```bash
-python manage.py clean_carts                    # default: unchecked-out, >90 days old
-python manage.py clean_carts --days 30          # custom retention
-python manage.py clean_carts --days 30 --dry-run
-python manage.py clean_carts --days 60 --include-checked-out
-```
-
-Schedule with cron:
-
-```cron
-# Nightly at 02:00
-0 2 * * * /path/to/venv/bin/python /path/to/project/manage.py clean_carts --days 30
-```
-
-Or Celery:
+Plain iteration (`for item in cart`) preloads `content_type` but
+leaves `item.product` as a lazy lookup — touching `.product` on each
+item in a template issues one SELECT per item. For render paths that
+read the concrete product (name, image, SKU), use
+`cart.items_with_products()`:
 
 ```python
-# myapp/tasks.py
-from celery import shared_task
-from django.core.management import call_command
-
-
-@shared_task
-def prune_abandoned_carts():
-    call_command("clean_carts", days=30)
+for item in cart.items_with_products():
+    # item.product is already prefetched — zero extra queries.
+    ...
 ```
+
+Under the hood it `select_related`s `content_type`, groups items by
+it, and issues one `in_bulk` per distinct product model. A 100-item
+cart across 3 product models drops from ~100 queries to 4.
+
+### Concurrency on `add` / `update` / `merge`
+
+`add()`, `update()`, and `merge()` are transactional but do **not**
+hold row locks during their read phase. Under concurrent requests on
+Postgres or MySQL, two workers that both read `quantity=N` can both
+write `N+q`, clobbering one of the adds. For code paths that must be
+concurrent-safe, wrap the mutation in your own `select_for_update()`
+block or serialise upstream (idempotency keys, queue-per-cart, etc.).
+
+`checkout()` itself is race-safe — see below.
+
+### `checkout()` internals
+
+`checkout()`:
+
+- **Validates.** Calls `can_checkout()` before touching the DB
+  (v3.1.0). Empty carts raise `CartException`; carts below
+  `settings.CART_MIN_ORDER_AMOUNT` raise `MinimumOrderNotMet`.
+- **Is atomic.** Marks the cart checked-out and (if a discount is
+  applied) increments `Discount.current_uses` in the same transaction.
+- **Is race-safe.** Takes a `SELECT … FOR UPDATE` on the `Cart` row
+  first, then (when a discount is applied) on the `Discount` row. Two
+  concurrent checkouts of the same cart produce exactly one counter
+  increment; two concurrent checkouts of the last remaining use of a
+  discount code result in one success and one `InvalidDiscountError`.
+- **Is idempotent across facades.** Calling `checkout()` twice on the
+  same cart — even from separate `Cart(request)` instances or workers
+  with stale in-memory state — is a no-op on the second call. No
+  second counter bump, no duplicate `cart_checked_out` signal.
+
+> [!note] `checkout()` does not reserve inventory
+> Stock reservation is the consuming project's responsibility. The
+> `InventoryChecker` interface has a `reserve()` method you can call
+> from your own checkout flow; the library's built-in `checkout()`
+> does not call it. Reservation semantics (timeout, release on failed
+> payment, retry) vary too much per project to bake a default.
+
+### Discount usage-cap enforcement
+
+```mermaid
+sequenceDiagram
+    participant V as View
+    participant C as Cart
+    participant DB as Database
+
+    V->>C: apply_discount("SUMMER25")
+    C->>DB: Discount.objects.get(code=...)
+    C->>C: discount.is_valid_for_cart(self)
+    C->>DB: cart.discount = discount
+
+    Note over V,DB: Some time passes — user browses, adds items,<br>another user may also be checking out the last use.
+
+    V->>C: checkout()
+    C->>DB: BEGIN
+    C->>DB: SELECT ... FROM Cart WHERE pk=? FOR UPDATE
+
+    alt cart already checked_out<br>(another facade won the race)
+        C->>DB: COMMIT
+        C-->>V: ok (no-op)
+    else proceed
+        C->>DB: SELECT ... FROM Discount WHERE pk=? FOR UPDATE
+        C->>C: discount.is_valid_for_cart(self)
+
+        alt still valid
+            C->>DB: UPDATE Discount SET current_uses = current_uses + 1
+            C->>DB: UPDATE Cart SET checked_out = true
+            C->>DB: COMMIT
+            C-->>V: ok
+        else no longer valid<br>(expired, deactivated, cap reached)
+            C->>DB: ROLLBACK
+            C-->>V: raises InvalidDiscountError
+        end
+    end
+```
+
+Two concurrent checkouts of the last remaining use of a discount code
+result in exactly one success and exactly one `InvalidDiscountError`.
+The counter is never exceeded.
 
 ---
 
-## Agent-Ready
+## Serialisation Format
 
-`django-cart` is designed to be **extended by coding agents on the
-first pass**. Three properties make that possible:
-
-1. **Small surface.** The public API is under 1000 lines across
-   four files and fits entirely in a single agent context window.
-2. **Explicit extension points.** Every subsystem is a settings
-   dotted-path pointing at a subclass of a clearly-typed abstract
-   base. No registries, no decorators, no magic.
-3. **Stable contracts.** Public names are preserved across patch
-   and minor releases. The same prompt that works today works on
-   the next minor.
-
-A minimum working example — generating a custom tax calculator with
-Claude:
-
-```text
-Prompt:
-
-  In my Django project I use django-cart. Generate a TaxCalculator
-  subclass that applies 7.25% tax if the cart's `summary()` is
-  above $100 and 5% otherwise. Wire it in through settings and
-  write a pytest that asserts both branches.
-
-Expected output:
-  - myapp/tax.py with `class Tiered(TaxCalculator)` returning Decimal
-  - settings.py with CART_TAX_CALCULATOR set to its dotted path
-  - tests/test_tax.py with two test functions exercising both branches
+```python
+payload = cart.cart_serializable()
+# {"7:42": {"content_type_id": 7, "object_id": 42, "quantity": 2,
+#           "unit_price": "9.99", "total_price": "19.98"},
+#  "__discount__": {"code": "SUMMER25"}}
 ```
 
-For the full agentic extension guide — prompt templates, review
-checklist, sharp edges, verification steps — see
-**[`docs/AGENTS.md`](docs/AGENTS.md)**.
+Item keys are `"<content_type_id>:<object_id>"` composites. The
+reserved `__discount__` key carries the applied discount's code (absent
+when no discount is applied). `from_serializable()` restores items by
+the composite identity and reattaches the `Discount` row if one is
+still present in the DB (silently skipped if the referenced discount
+has been deleted between serialise and restore).
+
+> [!important] Pre-v3.0.13 payload compatibility
+> v3.0.13 changed the key shape from `str(object_id)` to
+> `"content_type_id:object_id"` so two products with the same PK
+> across different content types no longer collide.
+> `from_serializable()` accepts both formats — payloads stored before
+> v3.0.13 keep working as long as each value carries `content_type_id`
+> (introduced in v3.0.11). Consumers that used to iterate keys to pull
+> `object_id` should read it from the value (emitted explicitly since
+> v3.0.13).
 
 ---
 
@@ -1047,9 +986,82 @@ erDiagram
     }
 ```
 
-`Item` has `unique_together` on `(cart, content_type, object_id)`
-and a composite index on the same triple — so `cart.add(p)` is
-always one primary-key lookup.
+`Item` has `unique_together` on `(cart, content_type, object_id)` and
+a composite index on the same triple — so `cart.add(p)` is always one
+primary-key lookup.
+
+---
+
+## Operations
+
+### Pruning abandoned carts
+
+Abandoned carts accumulate. The `clean_carts` management command
+removes them:
+
+```bash
+python manage.py clean_carts                    # default: unchecked-out, >90 days old
+python manage.py clean_carts --days 30          # custom retention
+python manage.py clean_carts --days 30 --dry-run
+python manage.py clean_carts --days 60 --include-checked-out
+```
+
+Schedule with cron:
+
+```cron
+# Nightly at 02:00
+0 2 * * * /path/to/venv/bin/python /path/to/project/manage.py clean_carts --days 30
+```
+
+Or Celery:
+
+```python
+# myapp/tasks.py
+from celery import shared_task
+from django.core.management import call_command
+
+
+@shared_task
+def prune_abandoned_carts():
+    call_command("clean_carts", days=30)
+```
+
+---
+
+## Agent-Ready
+
+`django-cart` is designed to be **extended by coding agents on the
+first pass**. Three properties make that possible:
+
+1. **Small surface.** The public API is under 1000 lines across four
+   files and fits entirely in a single agent context window.
+2. **Explicit extension points.** Every subsystem is a settings
+   dotted-path pointing at a subclass of a clearly-typed abstract
+   base. No registries, no decorators, no magic.
+3. **Stable contracts.** Public names are preserved across patch and
+   minor releases. The same prompt that works today works on the next
+   minor.
+
+A minimum working example — generating a custom tax calculator with
+Claude:
+
+```text
+Prompt:
+
+  In my Django project I use django-cart. Generate a TaxCalculator
+  subclass that applies 7.25% tax if the cart's `summary()` is
+  above $100 and 5% otherwise. Wire it in through settings and
+  write a pytest that asserts both branches.
+
+Expected output:
+  - myapp/tax.py with `class Tiered(TaxCalculator)` returning Decimal
+  - settings.py with CART_TAX_CALCULATOR set to its dotted path
+  - tests/test_tax.py with two test functions exercising both branches
+```
+
+For the full agentic extension guide — prompt templates, review
+checklist, sharp edges, verification steps — see
+**[`docs/AGENTS.md`](docs/AGENTS.md)**.
 
 ---
 
@@ -1059,10 +1071,9 @@ always one primary-key lookup.
 > This section is for working **on** the library. Application code
 > consuming `django-cart` does not need any of this.
 
-`django-cart` uses `pytest` + `pytest-django` exclusively — there
-is no `unittest.TestCase` subclassing, no `runtests.py`. Fixtures
-live in `tests/conftest.py`; helpers are never defined inside test
-files.
+`django-cart` uses `pytest` + `pytest-django` exclusively — there is
+no `unittest.TestCase` subclassing, no `runtests.py`. Fixtures live in
+`tests/conftest.py`; helpers are never defined inside test files.
 
 ```bash
 uv venv
@@ -1117,8 +1128,8 @@ reflection) tests.
 >
 > **Why it breaks.** Django's `django.template.Context.__copy__`
 > (pre-6.0) assigns `duplicate.dicts = self.dicts[:]` onto a value
-> returned by `copy(super())`, i.e. a `super()` proxy. Python 3.14
-> no longer permits attribute assignment on `super()` proxies, so any
+> returned by `copy(super())`, i.e. a `super()` proxy. Python 3.14 no
+> longer permits attribute assignment on `super()` proxies, so any
 > template render under Py3.14 + Django<6 raises
 > `AttributeError: 'super' object has no attribute 'dicts' and no
 > __dict__ for setting new attributes`.
@@ -1132,34 +1143,25 @@ reflection) tests.
 
 ---
 
-## What's Next
-
-> [!tip] Near-future roadmap item — high-precision decimal representation
-> A roadmap slot is reserved for cryptocurrency-style fractional
-> quantities — representing tiny fractions of a product (e.g. a
-> `Coin` model) denominated in long decimals with satoshi- or
-> wei-level precision. The cart stays a collection of `(product,
-> quantity, unit_price)` triples; only the numeric precision
-> changes. Design doc required before implementation. Broader
-> prioritisation lives in
-> [`docs/ANALYSIS.md`](docs/ANALYSIS.md).
->
-> *This is a scope marker, not a commitment.*
-
----
-
 ## Changelog, Roadmap, License
 
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — Keep-a-Changelog
   format.
-- **Analysis & remediation plan:** [`docs/ANALYSIS.md`](docs/ANALYSIS.md)
-  — bug-by-bug priorities, design gaps, and the suggested per-release
-  scope.
+- **Analysis and remediation plan:**
+  [`docs/ANALYSIS.md`](docs/ANALYSIS.md) — bug-by-bug priorities,
+  design gaps, and the suggested per-release scope.
 - **License:** MIT. See [`LICENSE`](LICENSE). (Relicensed from
   LGPL-3.0 in v3.0.11 — see `CHANGELOG.md`.)
 
-Contributions welcome. The library is small on purpose — if a
-feature fits the "session-backed cart" mission, open an issue or
-PR. For experimental / speculative work, prefer a downstream
-package that extends `django-cart` via its public API rather than
-forking.
+A roadmap slot is reserved for cryptocurrency-style fractional
+quantities — tiny fractions of a product (e.g. a `Coin` model)
+denominated in long decimals with satoshi- or wei-level precision. The
+cart stays a collection of `(product, quantity, unit_price)` triples;
+only the numeric precision changes. Design doc required before
+implementation. Scope marker, not a commitment —
+[`docs/ANALYSIS.md`](docs/ANALYSIS.md) tracks broader prioritisation.
+
+Contributions welcome. The library is small on purpose — if a feature
+fits the "session-backed cart" mission, open an issue or PR. For
+experimental or speculative work, prefer a downstream package that
+extends `django-cart` via its public API rather than forking.
