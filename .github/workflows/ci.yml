@@ -41,6 +41,24 @@ jobs:
       - name: Run tests
         run: pytest
  
+  changelog:
+    name: CHANGELOG has entry for current version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert CHANGELOG.md has a section for the pyproject.toml version
+        run: |
+          version=$(grep -oP '(?<=^version = ")[^"]+' pyproject.toml)
+          if [ -z "$version" ]; then
+            echo "Could not parse version from pyproject.toml"
+            exit 1
+          fi
+          if ! grep -qF "## [$version]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '## [$version]' section."
+            echo "Add an entry for $version (Keep-a-Changelog format) before tagging."
+            exit 1
+          fi
+
   publish:
     name: Publish to PyPI
     needs: test
