@@ -71,3 +71,14 @@ def test_custom_shipping_calculator_subclass_is_usable_inline():
     calc = InlineShipping()
     assert calc.calculate(_mock_cart()) == Decimal("5.99")
     assert len(calc.get_options(_mock_cart())) == 1
+
+
+@pytest.mark.django_db
+def test_get_shipping_calculator_falls_back_to_default_when_class_path_is_bad(settings):
+    """Covers cart/shipping.py:143-144 — ImportError/AttributeError
+    fallback. P1-4 adds a warning log around this."""
+    settings.CART_SHIPPING_CALCULATOR = "nonexistent.module.FakeShipping"
+
+    calculator = get_shipping_calculator()
+
+    assert isinstance(calculator, DefaultShippingCalculator)

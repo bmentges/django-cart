@@ -49,3 +49,22 @@ def test_add_bulk_returns_list_of_item_instances(cart, product_factory):
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0].quantity == 2
+
+
+def test_add_bulk_raises_on_invalid_quantity_and_rolls_back_earlier_items(cart, product_factory):
+    """Mid-batch invalid quantity aborts the whole operation atomically.
+    Covers cart/cart.py:441 (the `quantity < 1` guard inside add_bulk)."""
+    from cart.cart import InvalidQuantity
+
+    good1 = product_factory(name="BulkGood1")
+    good2 = product_factory(name="BulkGood2")
+    items = [
+        {"product": good1, "unit_price": Decimal("10.00"), "quantity": 1},
+        {"product": good2, "unit_price": Decimal("10.00"), "quantity": 0},  # invalid
+    ]
+
+    with pytest.raises(InvalidQuantity):
+        cart.add_bulk(items)
+
+    # Atomic rollback: neither item should have been saved.
+    assert cart.is_empty() is True

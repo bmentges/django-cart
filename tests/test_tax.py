@@ -48,3 +48,15 @@ def test_custom_tax_calculator_subclass_is_usable_inline():
             return Decimal("25.50")
 
     assert InlineTax().calculate(_mock_cart()) == Decimal("25.50")
+
+
+@pytest.mark.django_db
+def test_get_tax_calculator_falls_back_to_default_when_class_path_is_bad(settings):
+    """Covers cart/tax.py:97-98 — the ImportError/AttributeError
+    fallback. Today's behaviour (silent fallback) is locked in; P1-4
+    will add a warning log around it."""
+    settings.CART_TAX_CALCULATOR = "nonexistent.module.FakeTax"
+
+    calculator = get_tax_calculator()
+
+    assert isinstance(calculator, DefaultTaxCalculator)

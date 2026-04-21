@@ -822,7 +822,7 @@ v3.0.7 (shipped 2026-04-21) → P-1 Phase 4: split test_v300.py into
                               reflection. Custom* calculator test
                               doubles moved into the file that
                               references them. No cart behaviour change.
-v3.0.8 (this PR)            → P-1 Phase 5: split test_cart.py (the big
+v3.0.8 (shipped 2026-04-21) → P-1 Phase 5: split test_cart.py (the big
                               one — 49 TestCase subclasses, 2200 lines,
                               175 active tests + 2 silently shadowed).
                               19 new focused pytest files, one concern
@@ -861,28 +861,62 @@ v3.0.8 (patch)              → P-1 Phase 5: migrate test_cart.py (~2200
                               lines, 177 tests). May land as a series
                               of PRs per split file, each green, under
                               the 3.0.8 umbrella tag.
-v3.0.9 (patch)              → P-1 Phase 6: deletion pass — remove all
-                              reflection-only tests per the explicit
-                              list in §P-1.
-v3.0.10 (patch)             → P-1 Phase 7: behavioural coverage audit;
-                              author @pytest.mark.xfail(strict=True)
-                              regression tests for each known P0 bug.
-v3.0.11 (patch)             → P-1 Phase 8: unify test runner, delete
+v3.0.9 (this PR)            → P-1 Phases 6 + 7 combined: Phase 6's
+                              reflection-test deletion pass was done
+                              inline across Phases 1–5 and left
+                              nothing of substance to remove, so it's
+                              folded into Phase 7 rather than shipped
+                              as its own patch. Phase 7 content:
+                              - Four @pytest.mark.xfail(strict=True)
+                                regression tests covering the known
+                                P0 bugs (P0-1 from_serializable silent
+                                no-op, P0-2 Discount.current_uses
+                                never increments, P0-3
+                                CARTS_SESSION_ADAPTER_CLASS ignored,
+                                P0-4 CookieSessionAdapter no HTTP
+                                round-trip).
+                              - Coverage fills for the remaining
+                                uncovered behaviour branches:
+                                Cart.merge max-quantity caps (two
+                                paths), Cart.add_bulk invalid-quantity
+                                rollback, misconfigured calculator/
+                                checker fallbacks (tax/shipping/
+                                inventory), can_checkout minimum-met
+                                branch, Discount.increment_usage
+                                direct call, CookieSessionAdapter
+                                without response, cookie-delete of
+                                missing key.
+                              - Positive template-render tests via
+                                Template().render() for each cart
+                                template tag (the P0-5 fix is doc-only
+                                and needs no xfail; locking in the
+                                correct syntax guards against future
+                                README drift).
+                              Suite: 263 → 278 passed + 4 xfailed.
+                              Coverage: 95% → 98%. Remaining 2% is
+                              intentional dead code (cart/cart.py
+                              signals-ImportError fallback, retired
+                              in P1-11) and an orphan admin method
+                              (cart/admin.py:11 — admin-config bug
+                              tracked separately).
+v3.0.10 (patch)             → P-1 Phase 8: unify test runner, delete
                               runtests.py, tighten pytest config
                               (python_classes=[], filterwarnings=error),
                               enable coverage --fail-under=100 in CI.
                               P-1 complete.
-v3.0.12 .. v3.0.18 (patch)  → P0 bug fixes, one per release, each
+v3.0.11 .. v3.0.17 (patch)  → P0 bug fixes, one per release, each
                               removing an @xfail marker as the fix:
-                              3.0.12 = P0-1 (from_serializable)
-                              3.0.13 = P0-2 (discount current_uses —
+                              3.0.11 = P0-1 (from_serializable)
+                              3.0.12 = P0-2 (discount current_uses —
                                       gated, see note below)
-                              3.0.14 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
-                              3.0.15 = P0-4 (CookieSessionAdapter
+                              3.0.13 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
+                              3.0.14 = P0-4 (CookieSessionAdapter
                                       round-trip)
-                              3.0.16 = P0-5 (README template-tag fix)
-                              3.0.17 = P0-6 (CHANGELOG backfill)
-                              3.0.18 = P0-7 (docs stale-banner)
+                              3.0.15 = P0-5 (README template-tag
+                                      examples — doc-only fix, no
+                                      xfail to remove)
+                              3.0.16 = P0-6 (CHANGELOG backfill)
+                              3.0.17 = P0-7 (docs stale-banner)
 v3.1.0 (minor)              → P1 block + P2-1, P2-2, P2-3, P2-9.
                               Cart.checkout() grows a validate kwarg.
                               Default is None → DeprecationWarning +
