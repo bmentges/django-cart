@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [3.1.0] — 2026-04-21
+
+### ⚠️ Breaking changes
+
+- **`Cart.checkout()` now enforces `can_checkout()` before mutating.**
+  Pre-v3.1 the method happily marked an empty cart (or a cart below
+  `settings.CART_MIN_ORDER_AMOUNT`) as checked-out — a documented
+  footgun. It now raises `CartException("Cart is empty.")` on empty
+  carts and `MinimumOrderNotMet(...)` on below-minimum carts
+  (finally using the long-defined exception class). Callers that
+  relied on lax behaviour must either call `can_checkout()` themselves
+  upstream or catch the new exceptions.
+- **`CARTS_SESSION_ADAPTER_CLASS` renamed to `CART_SESSION_ADAPTER`**
+  (plural → singular, matching `CART_TAX_CALCULATOR` /
+  `CART_SHIPPING_CALCULATOR` / `CART_INVENTORY_CHECKER`). The legacy
+  plural setting is still honoured but emits a `DeprecationWarning`
+  and will be removed in v4.0. When both are set, the new singular
+  setting wins.
+
 ### Added
 - `Cart.items_with_products()` — batch-prefetching iteration path.
   Loads items with `select_related('content_type')`, groups by
