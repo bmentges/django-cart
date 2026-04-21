@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+- **P2** · `DiscountType.PERCENT` no longer lets `value` exceed 100.
+  `Discount.clean()` now raises `ValidationError` on percentage
+  discounts with `value > 100`, which admin forms and any caller
+  going through `full_clean()` will surface before save.
+  `Discount.calculate_discount()` also clamps its return value to
+  the cart subtotal (matching the existing clamp on `FIXED`
+  discounts), so legacy rows that pre-date the guard can't produce
+  a discount larger than the cart is worth. A DB-level
+  `CheckConstraint` is not added — the `check=` / `condition=`
+  kwarg renamed between Django 5.0 and 6.0 and the supported
+  matrix spans both; the constraint will follow once 4.2 rolls off.
 
 ## [3.0.13] — 2026-04-21
 
