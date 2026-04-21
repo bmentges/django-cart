@@ -1,12 +1,10 @@
 """Cart.merge: three strategies + error cases + guest-to-user flow."""
+
 from __future__ import annotations
 
 from decimal import Decimal
 
 import pytest
-
-from cart.cart import Cart
-
 
 pytestmark = pytest.mark.django_db
 
@@ -14,6 +12,7 @@ pytestmark = pytest.mark.django_db
 # --------------------------------------------------------------------------- #
 # Strategies
 # --------------------------------------------------------------------------- #
+
 
 @pytest.mark.parametrize(
     "strategy,cart_qty,other_qty,expected",
@@ -23,8 +22,12 @@ pytestmark = pytest.mark.django_db
         ("keep_higher", 3, 7, 7),
         ("keep_higher", 7, 3, 7),
     ],
-    ids=["add-combines", "replace-overwrites", "keep-higher-picks-other",
-         "keep-higher-picks-self"],
+    ids=[
+        "add-combines",
+        "replace-overwrites",
+        "keep-higher-picks-other",
+        "keep-higher-picks-self",
+    ],
 )
 def test_merge_strategy_resolves_existing_item_quantity(
     cart, other_cart, product, strategy, cart_qty, other_qty, expected
@@ -46,7 +49,9 @@ def test_merge_default_strategy_is_add(cart, other_cart, product):
     assert cart.cart.items.first().quantity == 5
 
 
-def test_merge_adds_products_not_present_in_target_cart(cart, other_cart, product_factory):
+def test_merge_adds_products_not_present_in_target_cart(
+    cart, other_cart, product_factory
+):
     a = product_factory(name="A")
     b = product_factory(name="B")
     cart.add(a, Decimal("10.00"), quantity=1)
@@ -80,6 +85,7 @@ def test_merge_updates_unit_price_from_source(cart, other_cart, product):
 # Error paths
 # --------------------------------------------------------------------------- #
 
+
 def test_merge_with_invalid_strategy_raises(cart, other_cart):
     with pytest.raises(ValueError):
         cart.merge(other_cart, strategy="invalid-strategy")
@@ -112,6 +118,7 @@ def test_merge_from_empty_source_is_a_noop(cart, other_cart, product):
 # --------------------------------------------------------------------------- #
 # Integration — guest cart → user cart
 # --------------------------------------------------------------------------- #
+
 
 def test_guest_cart_merges_into_user_cart_on_login_flow(
     cart, other_cart, product, django_user_model

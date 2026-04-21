@@ -1,4 +1,5 @@
 """InventoryChecker behaviour + Cart.add(check_inventory=True) integration."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -37,6 +38,7 @@ class FailingInventoryChecker(InventoryChecker):
 # --------------------------------------------------------------------------- #
 # InventoryChecker interface
 # --------------------------------------------------------------------------- #
+
 
 def test_default_inventory_checker_always_reports_available():
     assert DefaultInventoryChecker().check(MagicMock(), 1) is True
@@ -93,6 +95,7 @@ def test_get_inventory_checker_warns_and_falls_back_when_class_path_is_bad(setti
 # --------------------------------------------------------------------------- #
 # Cart.add integration (check_inventory parameter)
 # --------------------------------------------------------------------------- #
+
 
 def test_add_without_check_inventory_skips_the_checker(cart, product):
     item = cart.add(product, unit_price=Decimal("100.00"), quantity=2)

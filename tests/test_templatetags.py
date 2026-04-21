@@ -11,6 +11,7 @@ handling). End-to-end template-render coverage is owned by P0-5 (README
 template-tag examples wrong) and will be added in v3.0.16 alongside the
 README fix — see docs/ROADMAP_2026_04.md.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -42,6 +43,7 @@ def context_without_request():
 # cart_item_count
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_item_count_returns_zero_for_empty_cart(db, context_with_request):
     assert cart_item_count(context_with_request) == 0
 
@@ -52,13 +54,16 @@ def test_cart_item_count_returns_actual_count(cart, product, context_with_reques
     assert cart_item_count(context_with_request) == 3
 
 
-def test_cart_item_count_returns_zero_when_context_has_no_request(context_without_request):
+def test_cart_item_count_returns_zero_when_context_has_no_request(
+    context_without_request,
+):
     assert cart_item_count(context_without_request) == 0
 
 
 # --------------------------------------------------------------------------- #
 # cart_summary
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_summary_returns_zero_dollars_for_empty_cart(db, context_with_request):
     assert cart_summary(context_with_request) == "$0.00"
@@ -80,17 +85,22 @@ def test_cart_summary_returns_zero_dollars_when_context_has_no_request(
 # cart_is_empty
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_is_empty_returns_true_for_empty_cart(db, context_with_request):
     assert cart_is_empty(context_with_request) is True
 
 
-def test_cart_is_empty_returns_false_for_nonempty_cart(cart, product, context_with_request):
+def test_cart_is_empty_returns_false_for_nonempty_cart(
+    cart, product, context_with_request
+):
     cart.add(product, unit_price=Decimal("9.99"), quantity=1)
 
     assert cart_is_empty(context_with_request) is False
 
 
-def test_cart_is_empty_returns_true_when_context_has_no_request(context_without_request):
+def test_cart_is_empty_returns_true_when_context_has_no_request(
+    context_without_request,
+):
     assert cart_is_empty(context_without_request) is True
 
 
@@ -98,17 +108,18 @@ def test_cart_is_empty_returns_true_when_context_has_no_request(context_without_
 # cart_link
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_link_returns_default_anchor(db, context_with_request):
     result = cart_link(context_with_request)
 
     assert '<a href="/cart/' in result
-    assert '>View Cart</a>' in result
+    assert ">View Cart</a>" in result
 
 
 def test_cart_link_accepts_custom_text(db, context_with_request):
     result = cart_link(context_with_request, text="Go to Cart")
 
-    assert '>Go to Cart</a>' in result
+    assert ">Go to Cart</a>" in result
 
 
 def test_cart_link_accepts_css_class(db, context_with_request):
@@ -117,7 +128,9 @@ def test_cart_link_accepts_css_class(db, context_with_request):
     assert 'class="btn btn-primary"' in result
 
 
-def test_cart_link_falls_back_to_root_when_context_has_no_request(context_without_request):
+def test_cart_link_falls_back_to_root_when_context_has_no_request(
+    context_without_request,
+):
     result = cart_link(context_without_request)
 
     assert '<a href="/cart/">View Cart</a>' in result
@@ -137,7 +150,9 @@ def test_cart_link_falls_back_to_root_when_context_has_no_request(context_withou
 # full loader/parser/renderer.
 # --------------------------------------------------------------------------- #
 
-from django.template import Template  # noqa: E402 — logically belongs with the block below
+from django.template import (  # noqa: E402 — logically belongs with the block below
+    Template,
+)
 
 
 def test_cart_item_count_renders_through_template_engine(db, rf_request):
@@ -170,7 +185,7 @@ def test_cart_link_renders_through_template_engine(db, rf_request):
     result = tpl.render(Context({"request": rf_request}))
 
     assert 'class="btn btn-primary"' in result
-    assert '>My Cart</a>' in result
+    assert ">My Cart</a>" in result
 
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +240,7 @@ def test_cart_link_on_fresh_session_creates_no_cart_row(db, rf_request):
 # --------------------------------------------------------------------------- #
 # P1-C: cart_link URL hygiene
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_link_does_not_expose_cart_id_in_url(cart, product, context_with_request):
     """Sequential integer cart ids must not leak into the rendered URL.

@@ -1,5 +1,6 @@
 """Cart methods that integrate with tax/shipping calculators: tax(), shipping(),
 shipping_options(), total()."""
+
 from __future__ import annotations
 
 from decimal import Decimal

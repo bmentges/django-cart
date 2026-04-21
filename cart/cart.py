@@ -1,19 +1,19 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Sum, QuerySet
+from django.db.models import F, QuerySet, Sum
 from django.utils import timezone
 
 from . import models
 
 try:
     from .signals import (
+        cart_checked_out,
+        cart_cleared,
         cart_item_added,
         cart_item_removed,
         cart_item_updated,
-        cart_checked_out,
-        cart_cleared,
     )
 except ImportError:
     cart_item_added = None
@@ -162,6 +162,7 @@ class Cart:
         else:
             if isinstance(adapter, str):
                 from django.utils.module_loading import import_string
+
                 adapter = import_string(adapter)
             instance = adapter(request)
 
@@ -247,7 +248,14 @@ class Cart:
     # Public API
     # ------------------------------------------------------------------
 
-    def add(self, product, unit_price: Decimal, quantity: int = 1, validate_price: bool = False, check_inventory: bool = False) -> models.Item:
+    def add(
+        self,
+        product,
+        unit_price: Decimal,
+        quantity: int = 1,
+        validate_price: bool = False,
+        check_inventory: bool = False,
+    ) -> models.Item:
         """
         Add *product* to the cart.
 
@@ -268,13 +276,13 @@ class Cart:
             raise InvalidQuantity("Quantity must be at least 1.")
 
         if validate_price:
-            actual_price = getattr(product, 'price', None)
+            actual_price = getattr(product, "price", None)
             if actual_price is not None and unit_price != actual_price:
                 raise PriceMismatchError(
                     f"Price mismatch: expected {actual_price}, got {unit_price}."
                 )
 
-        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        max_qty = getattr(settings, "CART_MAX_QUANTITY_PER_ITEM", None)
         if max_qty is not None and int(quantity) > max_qty:
             raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
 
@@ -298,6 +306,7 @@ class Cart:
 
             if check_inventory:
                 from .inventory import get_inventory_checker
+
                 checker = get_inventory_checker()
                 total_qty = existing_qty + int(quantity)
                 if not checker.check(product, total_qty):
@@ -322,9 +331,17 @@ class Cart:
         item.delete()
         self._invalidate_cache()
         if cart_item_removed is not None:
-            cart_item_removed.send(sender=self.__class__, cart=self.cart, product=product)
+            cart_item_removed.send(
+                sender=self.__class__, cart=self.cart, product=product
+            )
 
-    def update(self, product, quantity: int, unit_price: Decimal | None = None, validate_price: bool = False) -> models.Item:
+    def update(
+        self,
+        product,
+        quantity: int,
+        unit_price: Decimal | None = None,
+        validate_price: bool = False,
+    ) -> models.Item:
         """
         Update the quantity (and optionally the unit price) for *product*.
 
@@ -342,13 +359,13 @@ class Cart:
             raise InvalidQuantity("Quantity cannot be negative.")
 
         if validate_price and unit_price is not None:
-            actual_price = getattr(product, 'price', None)
+            actual_price = getattr(product, "price", None)
             if actual_price is not None and unit_price != actual_price:
                 raise PriceMismatchError(
                     f"Price mismatch: expected {actual_price}, got {unit_price}."
                 )
 
-        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        max_qty = getattr(settings, "CART_MAX_QUANTITY_PER_ITEM", None)
         if max_qty is not None and int(quantity) > max_qty:
             raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
 
@@ -361,7 +378,9 @@ class Cart:
                 item.delete()
                 self._invalidate_cache()
                 if cart_item_updated is not None:
-                    cart_item_updated.send(sender=self.__class__, cart=self.cart, item=item, deleted=True)
+                    cart_item_updated.send(
+                        sender=self.__class__, cart=self.cart, item=item, deleted=True
+                    )
                 return item
 
             item.quantity = int(quantity)
@@ -377,11 +396,11 @@ class Cart:
 
     def count(self) -> int:
         """Return the total number of *units* across all items."""
-        if 'count' in self._cache:
-            return self._cache['count']
+        if "count" in self._cache:
+            return self._cache["count"]
         result = self.cart.items.aggregate(total=Sum("quantity"))["total"]
         count = result or 0
-        self._cache['count'] = count
+        self._cache["count"] = count
         return count
 
     def unique_count(self) -> int:
@@ -390,13 +409,13 @@ class Cart:
 
     def summary(self) -> Decimal:
         """Return the grand total price for all items."""
-        if 'summary' in self._cache:
-            return self._cache['summary']
-        result = self.cart.items.aggregate(
-            total=Sum(F("quantity") * F("unit_price"))
-        )["total"]
+        if "summary" in self._cache:
+            return self._cache["summary"]
+        result = self.cart.items.aggregate(total=Sum(F("quantity") * F("unit_price")))[
+            "total"
+        ]
         summary = result or Decimal("0.00")
-        self._cache['summary'] = summary
+        self._cache["summary"] = summary
         return summary
 
     def clear(self) -> None:
@@ -435,9 +454,7 @@ class Cart:
             return
 
         with transaction.atomic():
-            locked_cart = models.Cart.objects.select_for_update().get(
-                pk=self.cart.pk
-            )
+            locked_cart = models.Cart.objects.select_for_update().get(pk=self.cart.pk)
             if locked_cart.checked_out:
                 self.cart.checked_out = True
                 return
@@ -599,7 +616,7 @@ class Cart:
         if other_cart.is_empty():
             return
 
-        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        max_qty = getattr(settings, "CART_MAX_QUANTITY_PER_ITEM", None)
 
         with transaction.atomic():
             for other_item in other_cart.cart.items.all():
@@ -693,14 +710,14 @@ class Cart:
         if not items:
             return []
 
-        max_qty = getattr(settings, 'CART_MAX_QUANTITY_PER_ITEM', None)
+        max_qty = getattr(settings, "CART_MAX_QUANTITY_PER_ITEM", None)
         result = []
 
         with transaction.atomic():
             for item_data in items:
-                product = item_data['product']
-                unit_price = item_data['unit_price']
-                quantity = int(item_data['quantity'])
+                product = item_data["product"]
+                unit_price = item_data["unit_price"]
+                quantity = int(item_data["quantity"])
 
                 if quantity < 1:
                     raise InvalidQuantity("Quantity must be at least 1.")
@@ -809,6 +826,7 @@ class Cart:
             tax_amount = cart.tax()
         """
         from .tax import get_tax_calculator
+
         calculator = get_tax_calculator()
         return calculator.calculate(self)
 
@@ -824,6 +842,7 @@ class Cart:
             shipping_cost = cart.shipping()
         """
         from .shipping import get_shipping_calculator
+
         calculator = get_shipping_calculator()
         return calculator.calculate(self)
 
@@ -841,6 +860,7 @@ class Cart:
                 print(f"{option['name']}: ${option['price']}")
         """
         from .shipping import get_shipping_calculator
+
         calculator = get_shipping_calculator()
         return calculator.get_options(self)
 
@@ -865,7 +885,7 @@ class Cart:
         if self.is_empty():
             return False, "Cart is empty."
 
-        min_amount = getattr(settings, 'CART_MIN_ORDER_AMOUNT', None)
+        min_amount = getattr(settings, "CART_MIN_ORDER_AMOUNT", None)
         if min_amount is not None:
             if self.summary() < min_amount:
                 return False, f"Minimum order amount is {min_amount}."

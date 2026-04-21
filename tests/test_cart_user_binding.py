@@ -1,4 +1,5 @@
 """Cart.bind_to_user + Cart.get_user_carts: cart-to-user persistence."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import Cart
-
 
 pytestmark = pytest.mark.django_db
 
@@ -42,7 +42,9 @@ def test_unbound_cart_has_no_user(cart):
     assert cart.cart.user is None
 
 
-def test_user_can_have_multiple_carts(cart, other_cart, product_factory, django_user_model):
+def test_user_can_have_multiple_carts(
+    cart, other_cart, product_factory, django_user_model
+):
     user = django_user_model.objects.create_user(
         username="multiuser",
         email="multi@example.com",
@@ -61,6 +63,7 @@ def test_user_can_have_multiple_carts(cart, other_cart, product_factory, django_
 # --------------------------------------------------------------------------- #
 # get_active_user_carts — P3: safer default for login-flow merge
 # --------------------------------------------------------------------------- #
+
 
 def test_get_active_user_carts_excludes_checked_out_carts(
     cart, other_cart, product, django_user_model

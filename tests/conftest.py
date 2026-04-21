@@ -8,6 +8,7 @@ functions — declare a fixture here instead, or extend an existing one.
 See tests/README.md for the canonical test pattern, the rationale, and the
 full catalogue.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,7 +21,6 @@ from cart.cart import Cart
 from cart.models import Discount, DiscountType
 from tests.test_app.models import FakeProduct, FakeProductNoPrice
 
-
 # --------------------------------------------------------------------------- #
 # Custom-AUTH_USER_MODEL test gating
 # --------------------------------------------------------------------------- #
@@ -31,6 +31,7 @@ from tests.test_app.models import FakeProduct, FakeProductNoPrice
 # ``pytest --ds=tests.settings_custom_user tests/test_cart_custom_user.py``.
 # This hook keeps the default ``pytest`` invocation from collecting the
 # file and tripping over the sanity assertion about the active user model.
+
 
 def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "test_cart_custom_user.py":
@@ -46,6 +47,7 @@ def pytest_ignore_collect(collection_path, config):
 # --------------------------------------------------------------------------- #
 # Request / session
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def rf_request():
@@ -67,6 +69,7 @@ def rf_request():
 # --------------------------------------------------------------------------- #
 # Carts
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def cart(db, rf_request):
@@ -117,6 +120,7 @@ def user_cart(db, django_user_model):
 # Products
 # --------------------------------------------------------------------------- #
 
+
 @pytest.fixture
 def product(db):
     """The default product: a ``FakeProduct`` named 'Test Product' at $10.00.
@@ -153,14 +157,17 @@ def product_factory(db):
 
     Both arguments are optional; defaults are name='Widget', price='10.00'.
     """
+
     def _make(name: str = "Widget", price: str = "10.00") -> FakeProduct:
         return FakeProduct.objects.create(name=name, price=Decimal(price))
+
     return _make
 
 
 # --------------------------------------------------------------------------- #
 # Discounts
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def discount_percent(db):

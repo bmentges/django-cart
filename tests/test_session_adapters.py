@@ -9,6 +9,7 @@ This file is the reference implementation for the pytest-first test
 pattern described in tests/README.md. Future phases migrate other files
 against the conventions demonstrated here.
 """
+
 from __future__ import annotations
 
 from unittest.mock import Mock
@@ -17,10 +18,10 @@ import pytest
 
 from cart.session import CookieSessionAdapter, DjangoSessionAdapter
 
-
 # --------------------------------------------------------------------------- #
 # DjangoSessionAdapter
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def django_adapter():
@@ -73,6 +74,7 @@ def test_django_get_or_create_cart_id_returns_stored_id(django_adapter):
 # --------------------------------------------------------------------------- #
 # CookieSessionAdapter
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def cookie_adapter():

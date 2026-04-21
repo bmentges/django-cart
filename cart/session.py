@@ -71,10 +71,12 @@ class DjangoSessionAdapter(CartSessionAdapter):
 
     def get_or_create_cart_id(self) -> int | None:
         from .cart import CART_ID
+
         return self._session.get(CART_ID)
 
     def set_cart_id(self, cart_id: int) -> None:
         from .cart import CART_ID
+
         self._session[CART_ID] = cart_id
 
 
@@ -106,6 +108,7 @@ class CookieSessionAdapter(CartSessionAdapter):
 
     def get_or_create_cart_id(self) -> int | None:
         from .cart import CART_ID
+
         value = self._cookies.get(CART_ID)
         if value:
             try:
@@ -116,6 +119,7 @@ class CookieSessionAdapter(CartSessionAdapter):
 
     def set_cart_id(self, cart_id: int) -> None:
         from .cart import CART_ID
+
         self.set(CART_ID, str(cart_id))
 
     def flush_to_response(self, request, response) -> None:

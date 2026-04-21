@@ -1,4 +1,5 @@
 """Cart Django model: field defaults, __str__, ordering."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -7,7 +8,6 @@ import pytest
 from django.utils import timezone
 
 from cart.models import Cart as CartModel
-
 
 pytestmark = pytest.mark.django_db
 

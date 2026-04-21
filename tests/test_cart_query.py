@@ -1,11 +1,11 @@
 """Query methods: count, unique_count, summary, is_empty, __contains__, __len__,
 plus decimal/large-number edge cases."""
+
 from __future__ import annotations
 
 from decimal import Decimal
 
 import pytest
-
 
 pytestmark = pytest.mark.django_db
 
@@ -13,6 +13,7 @@ pytestmark = pytest.mark.django_db
 # --------------------------------------------------------------------------- #
 # Populated cart
 # --------------------------------------------------------------------------- #
+
 
 @pytest.fixture
 def cart_with_two_products(cart, product_factory):
@@ -67,7 +68,9 @@ def test_contains_returns_true_for_product_in_cart(cart_with_two_products):
     assert p1 in cart
 
 
-def test_contains_returns_false_for_product_not_in_cart(cart_with_two_products, product_factory):
+def test_contains_returns_false_for_product_not_in_cart(
+    cart_with_two_products, product_factory
+):
     cart, _, _ = cart_with_two_products
     ghost = product_factory(name="Ghost")
 
@@ -77,6 +80,7 @@ def test_contains_returns_false_for_product_not_in_cart(cart_with_two_products, 
 # --------------------------------------------------------------------------- #
 # Empty cart
 # --------------------------------------------------------------------------- #
+
 
 def test_count_on_empty_cart_is_zero(cart):
     assert cart.count() == 0
@@ -107,6 +111,7 @@ def test_iterating_empty_cart_yields_no_items(cart):
 # --------------------------------------------------------------------------- #
 # Decimal / boundary cases
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_handles_very_large_quantity(cart, product):
     cart.add(product, Decimal("0.01"), quantity=999_999)

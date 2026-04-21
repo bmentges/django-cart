@@ -8,6 +8,7 @@ rendering templates so test assertions stay trivial.
 
 Not part of the public django-cart API; not exported from the package.
 """
+
 from __future__ import annotations
 
 from django.http import JsonResponse

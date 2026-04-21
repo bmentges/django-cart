@@ -1,4 +1,5 @@
 """ItemManager behaviour: the `product=` kwarg shortcut for filter/get."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -7,9 +8,9 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import FieldError, ObjectDoesNotExist
 
-from cart.models import Cart as CartModel, Item
+from cart.models import Cart as CartModel
+from cart.models import Item
 from tests.test_app.models import FakeProduct
-
 
 pytestmark = pytest.mark.django_db
 
@@ -43,7 +44,9 @@ def test_get_by_product_returns_the_item(cart_with_widget, product):
     assert Item.objects.get(cart=cart, product=product).pk == item.pk
 
 
-def test_filter_by_unknown_product_returns_empty_queryset(cart_with_widget, product_factory):
+def test_filter_by_unknown_product_returns_empty_queryset(
+    cart_with_widget, product_factory
+):
     cart, _ = cart_with_widget
     other = product_factory(name="Unknown")
 
