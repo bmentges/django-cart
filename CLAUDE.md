@@ -19,8 +19,10 @@ templatetags, signals, pluggable calculators) exists to support that class.
 - Python: **3.10+**, Django: **4.2+** (CI matrix up to Py 3.14 / Dj 6.0)
 - Current version: see `pyproject.toml` (`version` field). Bump this when
   releasing; CI publishes on tag push.
-- License: **LGPL-3.0** (`LICENSE`). Keep this in mind if copying code in from
-  other projects.
+- License: **MIT** (`LICENSE`). Relicensed from LGPL-3.0 in v3.0.11 —
+  see `CHANGELOG.md` for the rationale. Copying code in from other MIT /
+  BSD / Apache-2.0 projects is fine; avoid copying from GPL / LGPL /
+  AGPL sources without clearing it first.
 
 ---
 
