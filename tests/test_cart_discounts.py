@@ -5,7 +5,11 @@ from decimal import Decimal
 
 import pytest
 
-from cart.cart import InvalidDiscountError
+from datetime import timedelta
+
+from django.utils import timezone
+
+from cart.cart import Cart, InvalidDiscountError
 from cart.models import Discount, DiscountType
 
 
@@ -133,6 +137,60 @@ def test_apply_discount_then_checkout_increments_current_uses(
     current_uses should be 1. Today it stays 0."""
     cart_worth_200.apply_discount("PERCENT20")
 
+    cart_worth_200.checkout()
+
+    discount_percent.refresh_from_db()
+    assert discount_percent.current_uses == 1
+
+
+def test_max_uses_enforced_across_carts(cart_worth_200, product, product_factory):
+    """A discount with ``max_uses=1`` can be applied + checked out once;
+    a second cart applying the same code must fail with a clear error."""
+    Discount.objects.create(
+        code="ONESHOT",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+        max_uses=1,
+    )
+    cart_worth_200.apply_discount("ONESHOT")
+    cart_worth_200.checkout()
+
+    from django.test import RequestFactory
+    request2 = RequestFactory().get("/")
+    request2.session = {}
+    second = Cart(request2)
+    second.add(product, unit_price=Decimal("100.00"), quantity=2)
+
+    with pytest.raises(InvalidDiscountError, match="maximum number of uses"):
+        second.apply_discount("ONESHOT")
+
+
+def test_checkout_with_expired_discount_rolls_back(cart_worth_200, discount_percent):
+    """If a discount becomes invalid between apply and checkout (e.g.
+    expired), checkout must raise and roll back — the cart stays open
+    and the counter never increments."""
+    cart_worth_200.apply_discount("PERCENT20")
+
+    discount_percent.valid_until = timezone.now() - timedelta(days=1)
+    discount_percent.save(update_fields=["valid_until"])
+
+    with pytest.raises(InvalidDiscountError, match="expired"):
+        cart_worth_200.checkout()
+
+    cart_worth_200.cart.refresh_from_db()
+    discount_percent.refresh_from_db()
+    assert cart_worth_200.cart.checked_out is False
+    assert discount_percent.current_uses == 0
+
+
+def test_checkout_is_idempotent_does_not_double_increment(
+    cart_worth_200, discount_percent
+):
+    """Calling checkout() twice on the same cart must leave
+    current_uses=1, not 2. Double-checkout is a no-op."""
+    cart_worth_200.apply_discount("PERCENT20")
+
+    cart_worth_200.checkout()
     cart_worth_200.checkout()
 
     discount_percent.refresh_from_db()

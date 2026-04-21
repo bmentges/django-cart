@@ -966,11 +966,45 @@ v3.0.11 (this PR)           → P0-1 fix: Cart.from_serializable
                               existing items; they just fail loudly
                               rather than silently when asked to
                               restore into an empty cart.
-v3.0.12 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
+v3.0.12 (this PR)           → P0-2 fix: Discount.current_uses now
+                              increments on checkout. Chose the
+                              "Alternative" unconditional-increment
+                              path over the default gated-behind-
+                              validate=True path — the Phase 7 xfail
+                              test asserts `current_uses == 1` after
+                              plain `checkout()` with no validate kwarg,
+                              which only the unconditional path
+                              satisfies (same forcing function as P0-1).
+                              Changes:
+                              - Cart.checkout() now wraps mutations in
+                                transaction.atomic(), locks the Discount
+                                row via select_for_update(), re-runs
+                                is_valid_for_cart, and raises
+                                InvalidDiscountError on failure (rolls
+                                back the checkout). On success, the
+                                counter is incremented via an F()
+                                expression so concurrent checkouts
+                                can't lose updates.
+                              - checkout() is now idempotent — calling
+                                it on an already-checked-out cart is a
+                                no-op (no second counter increment, no
+                                duplicate signal).
+                              - Discount.increment_usage() rewritten to
+                                use F() for race safety.
+                              This is a behaviour change for users who
+                              were (accidentally or deliberately)
+                              relying on the broken counter — discount
+                              codes with max_uses now actually enforce
+                              the cap. Semver note: treated as a bug
+                              fix in 3.0.x rather than deferred to
+                              3.1.0; the "documented feature didn't
+                              work" framing wins over the "new
+                              behaviour in a patch" framing. The
+                              obsolete validate=True gating plan in
+                              the v3.1.0 entry below is now moot.
+v3.0.13 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
                               each removing an @xfail marker as the
                               fix:
-                              3.0.12 = P0-2 (discount current_uses —
-                                      gated, see note below)
                               3.0.13 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
                               3.0.14 = P0-4 (CookieSessionAdapter
                                       round-trip)

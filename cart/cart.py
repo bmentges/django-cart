@@ -275,9 +275,40 @@ class Cart:
             cart_cleared.send(sender=self.__class__, cart=self.cart)
 
     def checkout(self) -> None:
-        """Mark the cart as checked out."""
-        self.cart.checked_out = True
-        self.cart.save(update_fields=["checked_out"])
+        """Mark the cart as checked out.
+
+        If a discount is applied, revalidates it under a row-level lock
+        and atomically increments its ``current_uses`` counter in the
+        same transaction (P0-2 — v3.0.12). If the discount became
+        invalid between :meth:`apply_discount` and this call (expired,
+        deactivated, or cap reached via a concurrent checkout),
+        :class:`InvalidDiscountError` is raised and the whole operation
+        rolls back — the cart is not marked checked-out and no counter
+        is bumped.
+
+        Idempotent: calling checkout on an already-checked-out cart is
+        a no-op. The counter is not incremented a second time and no
+        duplicate ``cart_checked_out`` signal fires.
+
+        :raises InvalidDiscountError: if an applied discount fails
+            revalidation at checkout time.
+        """
+        if self.cart.checked_out:
+            return
+
+        with transaction.atomic():
+            if self.cart.discount_id is not None:
+                locked = models.Discount.objects.select_for_update().get(
+                    pk=self.cart.discount_id
+                )
+                is_valid, message = locked.is_valid_for_cart(self)
+                if not is_valid:
+                    raise InvalidDiscountError(message)
+                locked.increment_usage()
+
+            self.cart.checked_out = True
+            self.cart.save(update_fields=["checked_out"])
+
         if cart_checked_out is not None:
             cart_checked_out.send(sender=self.__class__, cart=self.cart)
 
