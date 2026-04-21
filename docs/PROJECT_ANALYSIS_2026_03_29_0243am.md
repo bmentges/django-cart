@@ -1,5 +1,27 @@
 # Project Analysis: django-cart
 
+> [!warning] Status: superseded (kept for historical reference)
+> This audit was written 2026-03-29 against **version 3.0.1**. It
+> predates the P-1 test overhaul (v3.0.3–v3.0.10) and the P0 bug
+> fixes (v3.0.11–v3.0.14 unreleased as of 2026-04-21). Several of
+> the risks and observations listed below have since been resolved
+> or explicitly re-scoped:
+>
+> - Test framework migrated from `unittest.TestCase` to pytest +
+>   pytest-django (P-1 overhaul, complete).
+> - P0 bugs identified here — `Cart.from_serializable`,
+>   `Discount.current_uses`, `CARTS_SESSION_ADAPTER_CLASS`,
+>   `CookieSessionAdapter` cookie round-trip — now fixed with
+>   TDD regression tests. See [`CHANGELOG.md`](../CHANGELOG.md)
+>   `[Unreleased]` section.
+> - Coverage and quality-gate plans have been revised.
+>
+> For the active plan of record (current phase, per-item
+> motivation, acceptance criteria, release sequence), go to
+> **[`ROADMAP_2026_04.md`](ROADMAP_2026_04.md)**. This file is kept
+> on disk so prior links resolve; treat its contents as a dated
+> snapshot, not current guidance.
+
 **Date:** March 29, 2026, 02:43 AM  
 **Analyst:** Senior Software Engineer (Python/Django/E-commerce Specialist)  
 **Version Analyzed:** 3.0.1  

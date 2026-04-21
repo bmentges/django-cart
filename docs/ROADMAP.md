@@ -1,42 +1,22 @@
-# django-cart Development Roadmap
+# django-cart Roadmap
 
-**Current Version:** 3.0.0  
-**Last Updated:** March 2026  
-**Repository:** https://github.com/bmentges/django-cart
+> [!warning] This file has been superseded.
+> The active plan of record is
+> **[`docs/ROADMAP_2026_04.md`](ROADMAP_2026_04.md)**.
+> Please open that file for:
+>
+> - the current phase and release sequence (P-1 through P3),
+> - per-item motivation, fix plans, and acceptance criteria,
+> - historical decisions (what was shipped, skipped, or deferred).
+>
+> The short "Future Considerations" list that used to live here has
+> been folded into `ROADMAP_2026_04.md` §P3 — see that section for
+> features under consideration (multi-currency, cart sharing, cart
+> expiration, saved carts, async API, etc.) along with their status.
+>
+> Any future *dated* roadmap snapshots (e.g. `ROADMAP_2027_01.md`)
+> should be added alongside `ROADMAP_2026_04.md` rather than by
+> mutating this file.
 
----
-
-## Future Considerations
-
-The following features are marked for future consideration and are not yet scheduled:
-
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Multi-currency support | Low | Complex currency conversion |
-| Gift wrapping options | Low | Requires order customization |
-| Cart notes field | Medium | Simple addition |
-| Saved carts | Medium | User preference feature |
-| Cart sharing | Low | Social commerce feature |
-| Abandoned cart emails | Medium | Requires user identification |
-| Cart expiration | Medium | Background task integration |
-| Async cart operations | Low | Django async view support |
-
-### Potential Deprecations
-
-| Feature | Reason | Timeline |
-|---------|--------|----------|
-| `Cart._new()` private method | Internal API may change | v4.0.0 |
-| Session key format | May need to change for scalability | v4.0.0 |
-
----
-
-## Version Compatibility
-
-| Version | Python | Django |
-|---------|--------|--------|
-| v3.0.0 | 3.10+ | 4.2+ |
-
----
-
-*Roadmap maintained by project maintainers*  
-*Last updated: March 2026*
+This stub is kept so existing links and bookmarks continue to
+resolve.
