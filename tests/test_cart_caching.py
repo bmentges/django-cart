@@ -102,3 +102,140 @@ def test_cache_holds_up_under_many_summary_calls_on_large_cart(
     with django_assert_max_num_queries(1):
         for _ in range(10):
             cart.summary()
+
+
+# --------------------------------------------------------------------------- #
+# Calculator-value caching — tax / shipping / discount_amount / total
+#
+# ANALYSIS §8.2: a template that displays subtotal, tax, shipping, and
+# total invokes three calculators (and the discount computation) per
+# render of total() plus one each for the individual tax()/shipping()
+# calls. Caching them on ``_cache`` means each calculator runs exactly
+# once per Cart instance, with ``_invalidate_cache()`` (called from
+# every mutation) resetting the lot.
+# --------------------------------------------------------------------------- #
+
+from cart.shipping import ShippingCalculator  # noqa: E402
+from cart.tax import TaxCalculator  # noqa: E402
+
+
+class _CountingTaxCalculator(TaxCalculator):
+    """Flat-rate tax calculator that counts how often ``calculate()`` runs."""
+
+    call_count = 0
+
+    def calculate(self, cart):
+        _CountingTaxCalculator.call_count += 1
+        return cart.summary() * Decimal("0.10")
+
+
+class _CountingShippingCalculator(ShippingCalculator):
+    """Flat-rate shipping calculator that counts how often ``calculate()`` runs."""
+
+    call_count = 0
+
+    def calculate(self, cart):
+        _CountingShippingCalculator.call_count += 1
+        return Decimal("9.99")
+
+    def get_options(self, cart):
+        return [{"id": "flat", "name": "Flat", "price": Decimal("9.99")}]
+
+
+def test_tax_is_cached_across_calls(cart, product, settings):
+    """Repeated ``cart.tax()`` calls must hit the cache after the first.
+    Tax calculators can be expensive in the wild (external APIs — Stripe
+    Tax, Avalara, TaxJar) so recomputing per call is a real cost."""
+    settings.CART_TAX_CALCULATOR = "tests.test_cart_caching._CountingTaxCalculator"
+    _CountingTaxCalculator.call_count = 0
+    cart.add(product, Decimal("100.00"), quantity=1)
+
+    for _ in range(5):
+        cart.tax()
+
+    assert _CountingTaxCalculator.call_count == 1
+
+
+def test_shipping_is_cached_across_calls(cart, product, settings):
+    settings.CART_SHIPPING_CALCULATOR = (
+        "tests.test_cart_caching._CountingShippingCalculator"
+    )
+    _CountingShippingCalculator.call_count = 0
+    cart.add(product, Decimal("50.00"), quantity=1)
+
+    for _ in range(5):
+        cart.shipping()
+
+    assert _CountingShippingCalculator.call_count == 1
+
+
+def test_total_does_not_reinvoke_calculators_on_repeat_calls(cart, product, settings):
+    """``cart.total()`` combines summary / discount / tax / shipping.
+    Callers that render subtotal + tax + shipping + total shouldn't
+    pay for four calculator runs per field."""
+    settings.CART_TAX_CALCULATOR = "tests.test_cart_caching._CountingTaxCalculator"
+    settings.CART_SHIPPING_CALCULATOR = (
+        "tests.test_cart_caching._CountingShippingCalculator"
+    )
+    _CountingTaxCalculator.call_count = 0
+    _CountingShippingCalculator.call_count = 0
+    cart.add(product, Decimal("100.00"), quantity=2)
+
+    for _ in range(4):
+        cart.total()
+
+    assert _CountingTaxCalculator.call_count == 1
+    assert _CountingShippingCalculator.call_count == 1
+
+
+def test_add_invalidates_tax_and_shipping_caches(cart, product, settings):
+    """A mutation must reset the tax / shipping cache — otherwise the
+    template's subtotal updates but the tax line stays stale."""
+    settings.CART_TAX_CALCULATOR = "tests.test_cart_caching._CountingTaxCalculator"
+    settings.CART_SHIPPING_CALCULATOR = (
+        "tests.test_cart_caching._CountingShippingCalculator"
+    )
+    _CountingTaxCalculator.call_count = 0
+    _CountingShippingCalculator.call_count = 0
+    cart.add(product, Decimal("10.00"), quantity=1)
+    cart.tax()
+    cart.shipping()
+
+    cart.add(product, Decimal("10.00"), quantity=1)
+
+    cart.tax()
+    cart.shipping()
+    assert _CountingTaxCalculator.call_count == 2
+    assert _CountingShippingCalculator.call_count == 2
+
+
+def test_discount_amount_is_cached_across_calls(cart, product):
+    """Cheap to compute (one Decimal multiplication) but still worth
+    caching: it runs inside ``total()`` and a template rendering
+    'you saved $X' alongside total shouldn't re-multiply per field."""
+    from cart.models import Discount, DiscountType
+
+    Discount.objects.create(
+        code="CACHE20",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("20.00"),
+    )
+    cart.add(product, Decimal("100.00"), quantity=2)
+    cart.apply_discount("CACHE20")
+
+    # Patch calculate_discount to count calls.
+    original = Discount.calculate_discount
+    Discount.calculate_discount.call_count = 0  # type: ignore[attr-defined]
+
+    def counting_calculate_discount(self, c):
+        counting_calculate_discount.call_count += 1  # type: ignore[attr-defined]
+        return original(self, c)
+
+    counting_calculate_discount.call_count = 0  # type: ignore[attr-defined]
+    Discount.calculate_discount = counting_calculate_discount  # type: ignore[method-assign]
+    try:
+        for _ in range(5):
+            cart.discount_amount()
+        assert counting_calculate_discount.call_count == 1  # type: ignore[attr-defined]
+    finally:
+        Discount.calculate_discount = original  # type: ignore[method-assign]
