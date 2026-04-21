@@ -273,8 +273,22 @@ The suite is partway through the overhaul described in `docs/ROADMAP_2026_04.md`
   `test_cart_tax_shipping.py`, `test_cart_checkout.py` (seeded; Phase 5
   adds more). Test doubles (`Custom*Calculator`, `*InventoryChecker`)
   moved from the file's bottom into the relevant test file that
-  references them via dotted path. Targets v3.0.7.
-- ⏭ Phase 5: migrate and split `test_cart.py`.
+  references them via dotted path. Shipped in v3.0.7.
+- ✅ Phase 5: `test_cart.py` (~2200 lines, 49 `TestCase` subclasses)
+  split into 19 focused pytest files — `test_cart_model.py`,
+  `test_item_model.py`, `test_item_manager.py`, `test_cart_init.py`,
+  `test_cart_add.py`, `test_cart_remove.py`, `test_cart_update.py`,
+  `test_cart_query.py`, `test_cart_iteration.py`,
+  `test_cart_checkout.py` (extended from Phase 4),
+  `test_cart_merge.py`, `test_cart_bulk.py`,
+  `test_cart_user_binding.py`, `test_cart_serialization.py`,
+  `test_cart_caching.py`, `test_cart_max_quantity.py`,
+  `test_cart_price_validation.py`, `test_cart_admin.py` (HTTP-level
+  replacement for the legacy config-reflection classes),
+  `test_cart_atomic.py`, `test_clean_carts_command.py`. The two
+  shadowed tests from the duplicate `CartIterationTest` class are
+  recovered (P1-5 dissolves). Targets v3.0.8.
+- ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 7: behavioural coverage audit, P0 regression `xfail` tests.
 - ⏭ Phase 8: `runtests.py` deleted, CI flipped to pytest-only, coverage
