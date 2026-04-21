@@ -56,3 +56,54 @@ def test_user_can_have_multiple_carts(cart, other_cart, product_factory, django_
     carts = Cart.get_user_carts(user)
 
     assert carts.count() == 2
+
+
+# --------------------------------------------------------------------------- #
+# get_active_user_carts — P3: safer default for login-flow merge
+# --------------------------------------------------------------------------- #
+
+def test_get_active_user_carts_excludes_checked_out_carts(
+    cart, other_cart, product, django_user_model
+):
+    """P3 regression: ``Cart.get_user_carts`` returns every cart
+    associated with a user — including already-checked-out ones.
+    The README's login-flow example filters on ``.filter(checked_out=False)``
+    on top, but downstream callers that forget the filter will merge
+    an already-checked-out cart (a past order) into the fresh guest
+    cart, resurrecting old items. ``get_active_user_carts`` hard-codes
+    the filter so the safer path is the obvious one."""
+    user = django_user_model.objects.create_user(
+        username="mergeuser",
+        email="m@example.com",
+        password="p",
+    )
+    cart.bind_to_user(user)
+    cart.add(product, Decimal("10.00"))
+    cart.checkout()
+
+    other_cart.bind_to_user(user)
+    other_cart.add(product, Decimal("10.00"))
+
+    active = Cart.get_active_user_carts(user)
+
+    assert active.count() == 1
+    assert active.first().pk == other_cart.cart.pk
+
+
+def test_get_user_carts_still_includes_checked_out_carts_for_back_compat(
+    cart, product, django_user_model
+):
+    """get_user_carts() is unchanged — callers that genuinely want
+    all carts (e.g. building an order-history view) keep working."""
+    user = django_user_model.objects.create_user(
+        username="historyuser",
+        email="h@example.com",
+        password="p",
+    )
+    cart.bind_to_user(user)
+    cart.add(product, Decimal("10.00"))
+    cart.checkout()
+
+    all_carts = Cart.get_user_carts(user)
+
+    assert all_carts.count() == 1

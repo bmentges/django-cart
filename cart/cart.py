@@ -602,12 +602,33 @@ class Cart:
     @classmethod
     def get_user_carts(cls, user) -> QuerySet[models.Cart]:
         """
-        Get all carts associated with a user.
+        Get all carts associated with a user — **including** already
+        checked-out carts. Use this when you need the full history
+        (order list, admin view). For login-time merge flows, prefer
+        :meth:`get_active_user_carts` — the header-filter footgun is
+        skipped by design.
 
         :param user: Django User model instance.
-        :returns: QuerySet of Cart objects.
+        :returns: QuerySet of Cart objects (ordered by ``-creation_date``).
         """
         return models.Cart.objects.filter(user=user)
+
+    @classmethod
+    def get_active_user_carts(cls, user) -> QuerySet[models.Cart]:
+        """
+        Get the user's non-checked-out carts — the carts that can
+        still be mutated or merged.
+
+        Intended for login-time merge flows where forgetting the
+        ``checked_out=False`` filter (a documented footgun on
+        :meth:`get_user_carts`) would resurrect a past order's items
+        into the fresh guest cart. ``get_active_user_carts`` hard-codes
+        the filter so the correct path is the obvious one.
+
+        :param user: Django User model instance.
+        :returns: QuerySet of Cart objects with ``checked_out=False``.
+        """
+        return models.Cart.objects.filter(user=user, checked_out=False)
 
     def add_bulk(self, items: list[dict]) -> list[models.Item]:
         """

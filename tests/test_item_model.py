@@ -154,6 +154,46 @@ def test_positive_unit_price_passes_validation(product):
 
 
 # --------------------------------------------------------------------------- #
+# quantity validation (P3 — align DB-layer check with Cart API contract)
+# --------------------------------------------------------------------------- #
+
+def test_zero_quantity_fails_validation(product):
+    """``Cart.add`` already rejects ``quantity < 1`` at the API
+    boundary. The Item model's ``PositiveIntegerField`` allowed 0 —
+    direct ``Item.objects.create(..., quantity=0)`` bypassed the Cart
+    guard. ``full_clean()`` now catches the mismatch in admin forms
+    and any caller that validates before save."""
+    cart = CartModel.objects.create()
+    ct = ContentType.objects.get_for_model(FakeProduct)
+    item = Item(
+        cart=cart,
+        content_type=ct,
+        object_id=product.pk,
+        unit_price=Decimal("10.00"),
+        quantity=0,
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        item.full_clean()
+
+    assert "quantity" in exc_info.value.message_dict
+
+
+def test_positive_quantity_passes_validation(product):
+    cart = CartModel.objects.create()
+    ct = ContentType.objects.get_for_model(FakeProduct)
+    item = Item(
+        cart=cart,
+        content_type=ct,
+        object_id=product.pk,
+        unit_price=Decimal("10.00"),
+        quantity=1,
+    )
+
+    item.full_clean()  # must not raise
+
+
+# --------------------------------------------------------------------------- #
 # Cross-cart uniqueness
 # --------------------------------------------------------------------------- #
 

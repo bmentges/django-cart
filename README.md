@@ -302,9 +302,7 @@ from cart.cart import Cart
 
 def on_login(request):
     guest = Cart(request)                 # the current session cart
-    prior = Cart.get_user_carts(request.user).filter(
-        checked_out=False,
-    ).first()
+    prior = Cart.get_active_user_carts(request.user).first()
 
     if prior is None:
         guest.bind_to_user(request.user)
@@ -314,6 +312,13 @@ def on_login(request):
     user_cart.cart = prior
     user_cart.merge(guest, strategy="add")   # or "replace" / "keep_higher"
 ```
+
+> [!note] `get_user_carts()` vs `get_active_user_carts()`
+> Use `get_active_user_carts(user)` for login-merge flows — it pre-filters
+> `checked_out=False`, so a forgotten `.filter(…)` can't silently
+> resurrect items from a past order. Use `get_user_carts(user)` when
+> you genuinely need every cart the user has ever had (order history,
+> admin dashboards).
 
 Available merge strategies:
 
