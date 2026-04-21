@@ -265,8 +265,16 @@ The suite is partway through the overhaul described in `docs/ROADMAP_2026_04.md`
   Shipped in v3.0.5 (combined with Phase 1; v3.0.4 skipped).
 - ✅ Phase 3: `test_integration.py` (mock-based, misnamed) replaced with
   `test_http_integration.py` using Django's real test client against
-  minimal views wired into `tests/urls.py`. Targets v3.0.6.
-- ⏭ Phases 4–5: remaining files migrated and split.
+  minimal views wired into `tests/urls.py`. Shipped in v3.0.6.
+- ✅ Phase 4: `test_v300.py` split into seven focused files —
+  `test_tax.py`, `test_shipping.py`, `test_inventory.py` (includes
+  `Cart.add(check_inventory=True)` integration),
+  `test_discount_model.py`, `test_cart_discounts.py`,
+  `test_cart_tax_shipping.py`, `test_cart_checkout.py` (seeded; Phase 5
+  adds more). Test doubles (`Custom*Calculator`, `*InventoryChecker`)
+  moved from the file's bottom into the relevant test file that
+  references them via dotted path. Targets v3.0.7.
+- ⏭ Phase 5: migrate and split `test_cart.py`.
 - ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 7: behavioural coverage audit, P0 regression `xfail` tests.
 - ⏭ Phase 8: `runtests.py` deleted, CI flipped to pytest-only, coverage
