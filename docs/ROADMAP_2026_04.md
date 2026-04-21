@@ -761,6 +761,36 @@ Optional emit of cart events as JSON to a webhook URL, Kafka topic, or
 Django `BaseCommand` handler. Primarily for analytics pipelines. Could
 be a third-party package — doesn't have to live here.
 
+### P3-10 · High-precision decimal representation (crypto-style fractions)
+**Scope:** allow an Item to represent fractional holdings of a
+product denominated with far more precision than the current
+`DecimalField(max_digits=18, decimal_places=2)` money schema.
+**Use case:** a product *represents* a cryptocurrency coin (not the
+coin itself — no on-chain logic in the library). The cart holds
+small fractions of that representation (e.g. `0.00012345` BTC) so
+that a user interface can offer "buy fractions" experiences backed by
+downstream settlement logic in the consuming project.
+**Non-goals:** no wallet integration, no on-chain transaction
+construction, no exchange rates, no real-time quote fetching. The
+cart stays a session-backed collection of `(product, quantity,
+unit_price)` triples — only the numeric precision changes.
+**Shape (to be decided):** candidates include (a) adding a companion
+`quantity_decimal: DecimalField` alongside `quantity` and a
+`CART_QUANTITY_SCHEMA` setting to switch, (b) bumping `Item.quantity`
+to a `DecimalField` with configurable `max_digits`/`decimal_places`
+via app settings, or (c) a second `CryptoItem` model behind a feature
+flag. Shape (a) preserves the current API surface at the cost of two
+fields; (b) is cleanest but a hard break; (c) is the conservative
+middle ground. Design doc required before implementation.
+**Precision target:** `max_digits` in the 36–50 range and
+`decimal_places` up to 18 to cover satoshi-level fractions (10⁻⁸)
+plus ERC-20 tokens with 18-decimal precision (wei), with headroom.
+**Acceptance criteria (future):** round-trip through DB without
+precision loss, no float coercion anywhere in the path, correct
+`summary()` / `total()` arithmetic with the configured precision, and
+a regression test that multiplies and sums fractional holdings
+without drift.
+
 ---
 
 ## Release sequencing
