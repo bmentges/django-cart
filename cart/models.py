@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -23,7 +24,7 @@ class Cart(models.Model):
         verbose_name=_("checked out"),
     )
     user = models.ForeignKey(
-        "auth.User",
+        settings.AUTH_USER_MODEL,
         verbose_name=_("user"),
         on_delete=models.CASCADE,
         null=True,

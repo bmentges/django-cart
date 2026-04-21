@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/test_readme.py` — link-integrity checks for `README.md`.
   Fails CI if any relative repo path or intra-doc `#anchor` goes dead.
   External http(s) URLs are skipped (offline-clean).
+- `tests/custom_user_app/` + `tests/settings_custom_user.py` +
+  `tests/test_cart_custom_user.py` — a dedicated test harness that
+  runs django-cart under a swapped `AUTH_USER_MODEL`. CI now runs a
+  second pytest invocation per matrix leg
+  (`pytest --ds=tests.settings_custom_user tests/test_cart_custom_user.py`)
+  to prove the library installs and operates on projects with a
+  custom user model.
 
 ### Fixed
 - **P1-A** · `Cart.checkout()` is now idempotent across facades. Before
@@ -21,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to 2 and `cart_checked_out` would fire twice. Fixed by taking
   `select_for_update()` on the `Cart` row inside the atomic block and
   re-reading `checked_out` under the lock.
+- **P1-B** · `Cart.user` now references `settings.AUTH_USER_MODEL`
+  instead of the hardcoded `"auth.User"`, so django-cart is finally
+  installable on projects with a custom user model. Before this
+  release, `makemigrations` / `migrate` / `runserver` all failed at
+  system-check time with `cart.Cart has a relation with model
+  auth.User, which has been swapped out`. Fix includes an in-place
+  edit of migration `0003_add_user_fk` (which was itself the bug —
+  unapplicable under a swapped user model). Projects on the default
+  `auth.User` are unaffected; the swappable reference resolves to the
+  same target.
 
 ### Docs
 - README `Checkout` section, the concurrency warning in
