@@ -16,6 +16,10 @@ class ItemInline(admin.TabularInline):
 class CartAdmin(admin.ModelAdmin):
     list_display = ("id", "creation_date", "checked_out", "item_count")
     list_filter = ("checked_out",)
+    # ``=id`` is an exact-match lookup — integer PKs don't work with the
+    # default ``icontains`` prefix. Lets admins paste a cart id into
+    # the changelist search box and land on just that cart.
+    search_fields = ("=id",)
     inlines = [ItemInline]
 
     def item_count(self, obj):

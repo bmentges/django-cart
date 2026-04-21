@@ -23,6 +23,7 @@ Usage:
        options = cart.shipping_options()  # Returns list of options
 """
 
+import warnings
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import TYPE_CHECKING, TypedDict
@@ -140,5 +141,12 @@ def get_shipping_calculator() -> ShippingCalculator:
     try:
         calculator_class = import_string(calculator_path)
         return calculator_class()
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError) as exc:
+        warnings.warn(
+            f"CART_SHIPPING_CALCULATOR={calculator_path!r} could not be "
+            f"imported ({exc.__class__.__name__}: {exc}). Falling back to "
+            f"DefaultShippingCalculator (zero cost).",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return DefaultShippingCalculator()

@@ -179,6 +179,61 @@ def test_full_clean_accepts_fixed_discount_value_above_100():
 
 
 # --------------------------------------------------------------------------- #
+# clean() — valid_from must precede valid_until when both are set
+# --------------------------------------------------------------------------- #
+
+def test_full_clean_rejects_valid_from_after_valid_until():
+    """P2 regression: an admin could previously create a discount with
+    ``valid_from`` *after* ``valid_until`` (e.g. a copy-paste with the
+    dates swapped). The resulting row is never valid for any cart —
+    ``is_valid_for_cart`` falls through every window check. Nothing in
+    the library rejected the input, so the misconfiguration was only
+    discoverable at promo-launch-day-not-working time."""
+    from django.core.exceptions import ValidationError
+
+    now = timezone.now()
+    discount = Discount(
+        code="INVERTED",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+        valid_from=now + timedelta(days=5),
+        valid_until=now,
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        discount.full_clean()
+    assert "valid_until" in exc.value.message_dict
+
+
+def test_full_clean_accepts_equal_valid_from_and_valid_until():
+    """Edge case: an exactly-at-the-same-instant validity window is
+    a degenerate but not nonsensical config (a one-tick flash sale).
+    Allow it — rejecting would be over-tight."""
+    now = timezone.now()
+    discount = Discount(
+        code="INSTANT",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+        valid_from=now,
+        valid_until=now,
+    )
+
+    discount.full_clean()
+
+
+def test_full_clean_accepts_missing_validity_bounds():
+    """One or both of ``valid_from`` / ``valid_until`` may be ``None``
+    — indicates an open-ended window and must not trigger the check."""
+    discount = Discount(
+        code="OPEN_ENDED",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+    )
+
+    discount.full_clean()
+
+
+# --------------------------------------------------------------------------- #
 # is_valid_for_cart
 # --------------------------------------------------------------------------- #
 
