@@ -40,6 +40,17 @@ class CartSessionAdapter(ABC):
         """Store the cart ID in the session."""
         raise NotImplementedError
 
+    def flush_to_response(self, request, response) -> None:
+        """Persist any pending state to *response*.
+
+        Called by :class:`cart.middleware.CartCookieMiddleware` once the
+        view has returned. Default implementation is a no-op — Django
+        session-backed adapters rely on ``SessionMiddleware`` for
+        persistence and do not need this hook. Cookie-based adapters
+        override to write their pending state to ``Set-Cookie``.
+        """
+        return None
+
 
 class DjangoSessionAdapter(CartSessionAdapter):
     """
@@ -106,3 +117,23 @@ class CookieSessionAdapter(CartSessionAdapter):
     def set_cart_id(self, cart_id: int) -> None:
         from .cart import CART_ID
         self.set(CART_ID, str(cart_id))
+
+    def flush_to_response(self, request, response) -> None:
+        """Write pending cookie mutations to *response*.
+
+        Diffs ``self._cookies`` against ``request.COOKIES`` and calls
+        ``response.set_cookie`` for added/changed entries and
+        ``response.delete_cookie`` for entries that were removed. This
+        is the bridge that makes ``CARTS_SESSION_ADAPTER_CLASS =
+        "cart.session.CookieSessionAdapter"`` actually round-trip a
+        cart id through the browser — without it (pre-v3.0.12), set
+        operations only mutated the in-memory ``_cookies`` dict.
+        """
+        before = request.COOKIES
+        after = self._cookies
+        for key, value in after.items():
+            if before.get(key) != value:
+                response.set_cookie(key, value)
+        for key in before:
+            if key not in after:
+                response.delete_cookie(key)

@@ -221,3 +221,22 @@ def test_cookie_session_adapter_round_trips_via_real_request_cookies():
     reader = CookieSessionAdapter(request=request)
 
     assert reader.get_or_create_cart_id() == 42
+
+
+def test_cookie_flush_to_response_emits_delete_for_removed_cookie():
+    """If an incoming cookie is dropped from the adapter's state during
+    the request, ``flush_to_response`` must tell the browser to drop it
+    too — otherwise cleared state would silently resurrect."""
+    from django.http import HttpResponse
+    from django.test import RequestFactory
+
+    request = RequestFactory().get("/", HTTP_COOKIE="CART-ID=99; leftover=x")
+    adapter = CookieSessionAdapter(request=request)
+    adapter.delete("CART-ID")
+
+    response = HttpResponse()
+    adapter.flush_to_response(request, response)
+
+    assert "CART-ID" in response.cookies
+    assert response.cookies["CART-ID"].value == ""  # Django's delete marker
+    assert response.cookies["CART-ID"]["max-age"] == 0

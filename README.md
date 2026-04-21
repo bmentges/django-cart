@@ -647,6 +647,19 @@ Both forms work. A typo in the dotted path raises `ImportError`
 loudly — this is the one subsystem factory that does **not** fall
 back silently.
 
+> [!important]
+> `CookieSessionAdapter` (and any custom cookie-backed adapter) also
+> requires `CartCookieMiddleware` in `MIDDLEWARE` so pending cookies
+> are written to the response. `DjangoSessionAdapter` (the default)
+> does not need this — Django's `SessionMiddleware` handles it.
+>
+> ```python
+> MIDDLEWARE = [
+>     # ... existing middleware ...
+>     "cart.middleware.CartCookieMiddleware",
+> ]
+> ```
+
 ### Custom adapter
 
 Subclass `CartSessionAdapter` and implement its five abstract

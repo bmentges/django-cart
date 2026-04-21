@@ -241,27 +241,40 @@ Deprecated since Django 3.2 and slated for removal in Django 6.0. Currently
 harmless, but any Django 6.x compatibility sweep should drop it (Django now
 auto-discovers `AppConfig` subclasses).
 
-### 7.2 `CARTS_SESSION_ADAPTER_CLASS` is documented but not implemented
+### 7.2 ~~`CARTS_SESSION_ADAPTER_CLASS` is documented but not implemented~~ (resolved in v3.0.12)
 
-The README tells users:
+Historically: the setting was documented in the README but `Cart.__init__`
+called `request.session.get(CART_ID)` directly, and `CookieSessionAdapter.get()`
+read from an in-memory dict that never saw `request.COOKIES` — so the feature
+silently no-op'd end to end.
+
+Closed in three hops:
+
+- **v3.0.11 — P0-3:** `Cart.__init__` now reads `CARTS_SESSION_ADAPTER_CLASS`
+  and routes through the returned adapter. Bad dotted paths raise
+  `ImportError` loudly.
+- **v3.0.11 — P0-4:** `CookieSessionAdapter.__init__` hydrates
+  `self._cookies` from `request.COOKIES`, so a cart id written to one response
+  is recoverable from the next request's `Cookie` header.
+- **v3.0.12 — P0-A:** The adapter's `set` path now reaches the response.
+  `Cart._build_session_adapter` stashes the adapter on `request._cart_session`
+  and `cart.middleware.CartCookieMiddleware` calls the new
+  `CartSessionAdapter.flush_to_response(request, response)` hook to emit
+  `Set-Cookie` / `Delete-Cookie` for changed state. Before v3.0.12, the
+  adapter was constructed with `response=None`, so writes stuck in the
+  in-memory dict and the browser never received `CART-ID`.
+
+Downstream wiring:
 
 ```python
-CARTS_SESSION_ADAPTER_CLASS = CookieSessionAdapter
+# settings.py
+CARTS_SESSION_ADAPTER_CLASS = "cart.session.CookieSessionAdapter"
+MIDDLEWARE = [..., "cart.middleware.CartCookieMiddleware"]
 ```
 
-…but `Cart.__init__` calls `request.session.get(CART_ID)` directly — it never
-reads that setting. `DjangoSessionAdapter` / `CookieSessionAdapter` exist with
-tests but are never instantiated by library code. Setting the variable does
-**nothing**.
-
-Also: `CookieSessionAdapter.get()` reads from `self._cookies` (an in-memory
-dict populated only by `.set()` during the same request) — it never reads
-`request.COOKIES` — so even if it *were* wired in, a cart id set on one
-response would not be recovered on the next request. The adapter would need
-real cookie round-tripping before it can be offered to users.
-
-Either wire the setting into `Cart.__init__` (and fix the cookie adapter) or
-remove the feature from the README. See ROADMAP §P0.
+The middleware is harmless for `DjangoSessionAdapter` (it calls the ABC's
+no-op `flush_to_response`) — leaving it installed on a mixed-adapter
+project is safe.
 
 ### 7.3 "Integration" tests are not HTTP integration tests
 
