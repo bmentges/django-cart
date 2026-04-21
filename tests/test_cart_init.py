@@ -96,19 +96,6 @@ def test_shared_session_yields_same_cart_across_requests():
     assert c1.cart.pk == c2.cart.pk
 
 
-# --------------------------------------------------------------------------- #
-# P0 regression — @xfail until the fix lands
-# --------------------------------------------------------------------------- #
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "P0-3 — CARTS_SESSION_ADAPTER_CLASS setting is documented in the "
-        "README but never read by Cart.__init__. The constructor hardcodes "
-        "request.session access. Scheduled for v3.0.13 (see "
-        "docs/ROADMAP_2026_04.md §P0-3)."
-    ),
-)
 def test_carts_session_adapter_class_setting_is_honoured(settings, rf_request):
     """Setting the adapter class should cause Cart to route session ops
     through it, leaving request.session untouched."""
@@ -118,7 +105,4 @@ def test_carts_session_adapter_class_setting_is_honoured(settings, rf_request):
 
     Cart(rf_request)
 
-    # Target behaviour: the adapter is used, so request.session stays clean.
-    # Current behaviour: Cart ignores the setting and writes CART-ID
-    # directly into request.session → assertion fails → xfail expected.
     assert CART_ID not in rf_request.session
