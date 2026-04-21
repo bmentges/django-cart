@@ -1,78 +1,77 @@
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/bmentges/django-cart/ci.yml?style=for-the-badge&logo=github&logoColor=white&logoSize=auto&label=CI%2FCD%20Build%3A)  ![PyPI - Version](https://img.shields.io/pypi/v/django-cart?style=for-the-badge&logo=pypi&logoColor=white&logoSize=auto&label=PYPI%20Latest%20Version%3A)
+![CI](https://img.shields.io/github/actions/workflow/status/bmentges/django-cart/ci.yml?branch=master&style=for-the-badge&logo=github&logoColor=white&label=CI)
+![PyPI](https://img.shields.io/pypi/v/django-cart?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI)
+![Python](https://img.shields.io/badge/Python-3.10%2B-informational?style=for-the-badge&logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-4.2%2B-0C4B33?style=for-the-badge&logo=django&logoColor=white)
+![License](https://img.shields.io/badge/License-LGPL--3.0-8A2BE2?style=for-the-badge)
 
 # django-cart
 
-A lightweight, session-backed shopping cart for **Django e-commerce applications**. Built for developers who need a robust cart solution without the bloat of full e-commerce platforms.
+A lightweight, session-backed shopping cart for Django. One thin
+`Cart` facade over one database row, extended through explicit
+pluggable subsystems for tax, shipping, inventory, and session
+storage.
 
-**django-cart** uses Django's [content-type framework](https://docs.djangoproject.com/en/stable/ref/contrib/contenttypes/) to work with **any product model** — no modifications to your existing code required.
+> [!tip] Why reach for django-cart
+> - **Prototype-fast.** A working cart in three lines of view code
+>   and a `pip install`. No schema changes to your product models.
+> - **Small-store friendly.** Discounts, tax, and shipping ship
+>   in-box and plug in through one setting each. Scale out later by
+>   swapping the session adapter.
+> - **Agent-ready.** The public API fits in one context window.
+>   Coding agents (Claude, Cursor, Copilot) can generate correct
+>   extensions on the first pass — see
+>   [`docs/AGENTS.md`](docs/AGENTS.md).
 
----
+```mermaid
+graph TB
+    classDef facade fill:#1f2937,stroke:#60a5fa,color:#f9fafb,stroke-width:2px
+    classDef plug fill:#0f172a,stroke:#a78bfa,color:#e2e8f0,stroke-dasharray:4 2
+    classDef store fill:#0b1220,stroke:#34d399,color:#d1fae5
+    classDef opt fill:#0b1220,stroke:#f59e0b,color:#fef3c7,stroke-dasharray:2 2
 
-## Table of Contents
+    View["Django view<br>or DRF endpoint"]
+    Cart["Cart facade<br>cart.cart.Cart"]:::facade
+    Session["Session Adapter<br>CARTS_SESSION_ADAPTER_CLASS"]:::store
+    DB[("Cart, Item, Discount<br>database rows")]:::store
 
-- [Why django-cart?](#why-django-cart)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Basic Usage](#basic-usage)
-- [API Reference](#api-reference)
-- [Advanced Features](#advanced-features)
-  - [Discounts](#discounts)
-  - [Tax Calculator](#tax-calculator)
-  - [Shipping Calculator](#shipping-calculator)
-  - [Inventory Checker](#inventory-checker)
-  - [Cart Merge](#cart-merge)
-  - [User Binding](#user-binding)
-  - [Bulk Operations](#bulk-operations)
-  - [Maximum Quantity Limits](#maximum-quantity-limits)
-  - [Price Validation](#price-validation)
-  - [Caching](#caching)
-- [Template Integration](#template-integration)
-- [Signals](#signals)
-- [Session Adapters](#session-adapters)
-- [Database Optimization](#database-optimization)
-- [Maintenance](#maintenance)
-- [Testing](#testing)
-- [Developer Setup](#developer-setup)
+    Tax["Tax Calculator<br>CART_TAX_CALCULATOR"]:::plug
+    Ship["Shipping Calculator<br>CART_SHIPPING_CALCULATOR"]:::plug
+    Inv["Inventory Checker<br>CART_INVENTORY_CHECKER"]:::plug
 
----
+    Signals["Django signals<br>cart_item_added, ..."]:::opt
+    Tags["Template tags<br>cart_item_count, ..."]:::opt
 
-## Why django-cart?
-
-| Feature | Benefit |
-|---------|---------|
-| **Any Product Model** | Works with your existing models via generic foreign keys |
-| **Session-Backed** | Lightweight storage, scales to multiple servers |
-| **Atomic Operations** | Safe concurrent cart modifications |
-| **Type Hints** | Full IDE support and static analysis |
-| **Extensible** | Signals, hooks, and custom session adapters |
-| **Production-Ready** | 290 tests, database indexes, cache support |
-
----
-
-## Quick Start
-
-```python
-from cart.cart import Cart
-from decimal import Decimal
-
-# Add items to cart
-cart = Cart(request)
-cart.add(product, unit_price=product.price, quantity=2)
-
-# Check cart status
-cart.count()         # Total items (e.g., 5)
-cart.summary()        # Total price (e.g., Decimal('99.99'))
-cart.is_empty()       # Boolean
-
-# Update quantities
-cart.update(product, quantity=5)
-
-# Remove items
-cart.remove(product)
-
-# Checkout
-cart.checkout()
+    View --> Cart
+    Cart --> Session
+    Cart --> DB
+    Cart -.->|plug| Tax
+    Cart -.->|plug| Ship
+    Cart -.->|plug| Inv
+    Cart -.->|emit| Signals
+    View -.->|render| Tags
 ```
+
+---
+
+## Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [Using the Cart](#using-the-cart)
+- [Discounts](#discounts)
+- [Pluggable Subsystems](#pluggable-subsystems)
+- [Session Storage](#session-storage)
+- [Signals](#signals)
+- [Template Tags](#template-tags)
+- [Settings Reference](#settings-reference)
+- [Admin Integration](#admin-integration)
+- [Operations](#operations)
+- [Agent-Ready](#agent-ready)
+- [Data Model](#data-model)
+- [Testing](#testing-django-cart)
+- [Requirements](#requirements)
+- [Changelog, Roadmap, License](#changelog-roadmap-license)
 
 ---
 
@@ -82,541 +81,611 @@ cart.checkout()
 pip install django-cart
 ```
 
-Add to `INSTALLED_APPS` in `settings.py`:
+Add to `INSTALLED_APPS` and run migrations. The library ships five
+migrations; no product-model changes are required.
 
 ```python
+# settings.py
 INSTALLED_APPS = [
-    ...
-    "django.contrib.contenttypes",  # Required (default in Django)
+    # ...
+    "django.contrib.contenttypes",  # already default in Django
     "cart",
 ]
 ```
-
-Run migrations:
 
 ```bash
 python manage.py migrate cart
 ```
 
+> [!note] About `uv`
+> The maintainer uses [`uv`](https://docs.astral.sh/uv/) for local
+> development of this library. Downstream projects can use any
+> installer (`pip`, `poetry`, `pipenv`, `uv`, `rye`). The public API
+> is installer-agnostic.
+
 ---
 
-## Basic Usage
+## Quick Start
 
-### Views
+A complete add-to-cart flow is three view functions and a template.
 
 ```python
 # views.py
+from decimal import Decimal
 from django.shortcuts import get_object_or_404, redirect, render
-from cart.cart import Cart, ItemDoesNotExist, InvalidQuantity
+from cart.cart import Cart
 from shop.models import Product
 
 
 def cart_add(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
-    quantity = int(request.POST.get("quantity", 1))
-    cart = Cart(request)
-    cart.add(product, unit_price=product.price, quantity=quantity)
+    Cart(request).add(product, unit_price=product.price, quantity=1)
     return redirect("cart_detail")
 
 
 def cart_remove(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
-    cart = Cart(request)
-    try:
-        cart.remove(product)
-    except ItemDoesNotExist:
-        pass  # Already removed
-    return redirect("cart_detail")
-
-
-def cart_update(request, product_id):
-    product = get_object_or_404(Product, pk=product_id)
-    quantity = int(request.POST.get("quantity", 1))
-    cart = Cart(request)
-    try:
-        cart.update(product, quantity=quantity)
-    except InvalidQuantity:
-        pass
+    Cart(request).remove(product)
     return redirect("cart_detail")
 
 
 def cart_detail(request):
     return render(request, "cart/detail.html", {"cart": Cart(request)})
-
-
-def cart_checkout(request):
-    cart = Cart(request)
-    # Process payment...
-    cart.checkout()
-    return redirect("order_complete")
 ```
 
-### URLs
-
-```python
-# urls.py
-from django.urls import path
-from shop import views
-
-urlpatterns = [
-    path("cart/", views.cart_detail, name="cart_detail"),
-    path("cart/add/<int:product_id>/", views.cart_add, name="cart_add"),
-    path("cart/remove/<int:product_id>/", views.cart_remove, name="cart_remove"),
-    path("cart/update/<int:product_id>/", views.cart_update, name="cart_update"),
-    path("cart/checkout/", views.cart_checkout, name="cart_checkout"),
-]
+```html
+{# cart/detail.html #}
+{% load cart_tags %}
+{% if cart.is_empty %}
+    <p>Your cart is empty.</p>
+{% else %}
+    <ul>
+      {% for item in cart %}
+        <li>{{ item.quantity }} × {{ item.product }} —
+            {{ item.total_price }}</li>
+      {% endfor %}
+    </ul>
+    <p><strong>Total: {{ cart.summary }}</strong></p>
+{% endif %}
 ```
+
+What just happened:
+
+1. `Cart(request)` looked up `CART-ID` in the current session. It
+   did not find one, so it created a new `cart.models.Cart` row and
+   wrote the row id back into the session.
+2. `.add(...)` created a `cart.models.Item` bound to the cart, with
+   a generic foreign key to your `Product` — no changes required to
+   the `Product` model itself.
+3. In the template, iterating `cart` walks items with products
+   prefetched; `cart.summary` returns a `Decimal` sum of all
+   `quantity × unit_price`.
 
 ---
 
-## API Reference
+## Core Concepts
 
-### Cart Class
+### The `Cart` facade
+
+`cart.cart.Cart` is a thin wrapper around a single
+`cart.models.Cart` row associated with the current session. The
+class holds two pieces of state:
+
+- `self.cart` — the DB row.
+- `self._cache` — an in-memory cache for `count()` and `summary()`,
+  invalidated on every mutation.
+
+No hidden threads, no background work, no module-level registry.
+
+### Items and generic foreign keys
+
+Each `Item` references its product through
+`(content_type, object_id)` — Django's
+[contenttypes framework](https://docs.djangoproject.com/en/stable/ref/contrib/contenttypes/).
+This is what lets `django-cart` work with **any** product model
+without schema changes.
 
 ```python
-from cart.cart import Cart, ItemDoesNotExist, InvalidQuantity
+cart.add(coffee_bean, Decimal("12.00"))        # Coffee model
+cart.add(digital_course, Decimal("99.00"))     # Course model
+# Same cart, different product classes.
+```
+
+### Session-backed lifecycle
+
+```mermaid
+flowchart LR
+    classDef state fill:#0b1220,stroke:#60a5fa,color:#e2e8f0
+    classDef money fill:#0b1220,stroke:#34d399,color:#d1fae5
+    classDef final fill:#1f2937,stroke:#a78bfa,color:#f9fafb,stroke-width:2px
+
+    Empty["Cart(request)<br>empty"]:::state
+    Add["add(product, price)"]:::state
+    Inspect["summary / count /<br>is_empty / iteration"]:::state
+    Discount["apply_discount(code)"]:::money
+    Math["tax() + shipping() −<br>discount_amount() → total()"]:::money
+    Checkout["checkout()<br>atomic, idempotent"]:::final
+
+    Empty --> Add
+    Add --> Inspect
+    Inspect --> Discount
+    Discount --> Math
+    Math --> Checkout
+```
+
+The only thing that lives in the HTTP session is the integer cart
+id. Everything else is a database row. A cart survives page loads
+but does not become an order — that is your checkout flow's
+responsibility. `checkout()` simply marks the cart
+`checked_out=True` and (if a discount was applied) bumps its usage
+counter atomically.
+
+---
+
+## Using the Cart
+
+### Adding, updating, removing
+
+```python
+from cart.cart import Cart, InvalidQuantity, ItemDoesNotExist
 
 cart = Cart(request)
+
+item = cart.add(product, unit_price=Decimal("12.00"), quantity=2)
+cart.update(product, quantity=5)          # new quantity (0 removes)
+cart.update(product, quantity=3, unit_price=Decimal("9.99"))
+cart.remove(product)                      # raises ItemDoesNotExist
+cart.clear()                              # empties everything
 ```
 
-#### Core Methods
+All mutations wrap the DB work in `transaction.atomic()` and
+invalidate the internal summary cache on success.
 
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `cart.add(product, unit_price, quantity=1)` | Add product to cart | `Item` |
-| `cart.remove(product)` | Remove product | `None` |
-| `cart.update(product, quantity, unit_price=None)` | Update quantity (0 = remove) | `None` |
-| `cart.clear()` | Remove all items | `None` |
-| `cart.checkout()` | Mark cart as checked out | `None` |
+> [!warning] Concurrency
+> `add()` / `update()` / `merge()` are transactional but do **not**
+> hold row locks during their read phase. Under concurrent requests
+> on Postgres or MySQL, two workers reading `quantity=N` can both
+> write `N+q`, clobbering one of the adds. For code paths that must
+> be concurrent-safe, wrap the mutation in your own
+> `select_for_update()` block or serialise upstream (idempotency
+> keys, queue-per-cart, etc.). `checkout()` already uses
+> `select_for_update()` on the `Discount` row — use it as a template.
 
-#### Query Methods
+### Bulk operations
 
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `cart.count()` | Total units in cart | `int` |
-| `cart.unique_count()` | Number of distinct products | `int` |
-| `cart.summary()` | Grand total | `Decimal` |
-| `cart.is_empty()` | Cart has no items | `bool` |
-| `cart.contains(product)` | Product in cart | `bool` |
-
-#### Utility Methods
-
-| Method | Description | Returns |
-|--------|-------------|---------|
-| `cart.cart_serializable()` | JSON-safe dict for APIs | `dict` |
-| `cart.merge(other_cart, strategy)` | Merge two carts | `None` |
-| `cart.bind_to_user(user)` | Associate with user account | `None` |
-| `cart.add_bulk(items)` | Add multiple items | `list[Item]` |
-| `Cart.get_user_carts(user)` | Carts for a user (class method) | `QuerySet` |
-
-### Item Properties
-
-Each item in the cart exposes:
+Add or update many items at once, inside a single transaction:
 
 ```python
-item.product       # Your product model instance
-item.quantity      # int
-item.unit_price    # Decimal
-item.total_price  # Decimal (quantity × unit_price)
+cart.add_bulk([
+    {"product": p1, "unit_price": Decimal("10.00"), "quantity": 2},
+    {"product": p2, "unit_price": Decimal("20.00"), "quantity": 1},
+])
 ```
 
-### Magic Methods
+### Iteration and introspection
 
 ```python
-len(cart)              # Same as cart.count()
-for item in cart:      # Iterate over items
-cart[product]          # Access item by product
-product in cart        # Same as cart.contains(product)
+len(cart)                 # int — total units (alias of cart.count())
+cart.count()              # int — same as len(cart)
+cart.unique_count()       # int — number of distinct products
+cart.is_empty()           # bool
+product in cart           # bool — uses __contains__
+for item in cart: ...     # iterates items, content_type preloaded
 ```
+
+Each `item` exposes `.product`, `.quantity`, `.unit_price`,
+`.total_price` (a `Decimal` property).
+
+### Money math
+
+```python
+cart.summary()            # Decimal — Σ quantity × unit_price
+cart.tax()                # Decimal — uses configured TaxCalculator
+cart.shipping()           # Decimal — uses configured ShippingCalculator
+cart.discount_amount()    # Decimal — 0.00 if no discount applied
+cart.total()              # Decimal — summary − discount + tax + shipping
+```
+
+`summary()` and `count()` are cached on the `Cart` instance and
+invalidated on every mutation. `tax()` / `shipping()` call out to
+the configured calculators on each call — if they are expensive,
+memoise on the calculator side.
+
+### User binding and merging
+
+Bind a guest cart to a user on login, and merge the guest cart into
+any pre-existing user cart:
+
+```python
+from cart.cart import Cart
+
+def on_login(request):
+    guest = Cart(request)                 # the current session cart
+    prior = Cart.get_user_carts(request.user).filter(
+        checked_out=False,
+    ).first()
+
+    if prior is None:
+        guest.bind_to_user(request.user)
+        return
+
+    user_cart = Cart(request)
+    user_cart.cart = prior
+    user_cart.merge(guest, strategy="add")   # or "replace" / "keep_higher"
+```
+
+Available merge strategies:
+
+| Strategy | Result per product |
+|----------|--------------------|
+| `add` (default) | `quantity = old + new` |
+| `replace` | `quantity = new` |
+| `keep_higher` | `quantity = max(old, new)` |
+
+### Serialisation
+
+Freeze a cart to a JSON-safe dict and restore it later — useful for
+cross-device sync or for passing through an API:
+
+```python
+payload = cart.cart_serializable()
+# {"42": {"content_type_id": 7, "quantity": 2,
+#         "unit_price": "9.99", "total_price": "19.98"}, ...}
+
+# ...later, possibly in a different request or worker...
+restored = Cart.from_serializable(new_request, payload)
+```
+
+> [!important] `content_type_id` is required to restore into a fresh cart
+> The payload emitted by `cart_serializable()` includes
+> `content_type_id` per item (added in v3.0.11). This lets
+> `from_serializable()` create items in a brand-new cart. Legacy
+> payloads without the field can still **update** items already
+> present in the target cart, but attempting to create new items
+> from them raises `ValueError` with a clear message — never a
+> silent no-op.
+
+### Checkout
+
+```python
+can, message = cart.can_checkout()
+if not can:
+    return render(request, "cart/detail.html", {"cart": cart, "error": message})
+
+try:
+    cart.checkout()
+except InvalidDiscountError as e:
+    # A discount was applied earlier but is no longer valid
+    # (expired, deactivated, or max_uses reached between apply
+    # and checkout). The whole operation rolled back — the cart
+    # is still open, the user can remove the discount and retry.
+    ...
+```
+
+`checkout()` is:
+
+- **Atomic.** Marks the cart checked-out and (if a discount is
+  applied) increments `Discount.current_uses` in the same
+  transaction.
+- **Race-safe at the discount level.** Takes a `SELECT … FOR UPDATE`
+  on the `Discount` row, revalidates, and increments via an `F()`
+  expression. Two concurrent checkouts of the last remaining use
+  result in one success and one `InvalidDiscountError`.
+- **Idempotent.** Calling `checkout()` twice on the same cart is a
+  no-op — no second counter bump, no duplicate signal.
+
+> [!note] `checkout()` does not reserve inventory
+> Stock reservation is the consuming project's responsibility. The
+> `InventoryChecker` interface has a `reserve()` method you can call
+> from your own checkout flow; the library's built-in `checkout()`
+> does not call it. This is deliberate — reservation semantics
+> (timeout, release on failed payment, retry) vary too much per
+> project to bake a default.
 
 ### Exceptions
 
-| Exception | When Raised |
+All cart exceptions subclass `cart.cart.CartException`.
+
+| Exception | Raised when |
 |-----------|-------------|
-| `InvalidQuantity` | Quantity < 1 or exceeds maximum |
-| `ItemDoesNotExist` | Product not in cart |
+| `InvalidQuantity` | quantity < 1 on `add`, < 0 on `update`, or > `CART_MAX_QUANTITY_PER_ITEM` |
+| `ItemDoesNotExist` | `remove()` / `update()` called for a product not in the cart |
+| `PriceMismatchError` | `validate_price=True` and `unit_price != product.price` |
+| `InsufficientStock` | `check_inventory=True` and the configured `InventoryChecker.check()` returns `False` |
+| `InvalidDiscountError` | bad code, already-applied discount, failed validity check, revalidation failure at checkout |
+| `MinimumOrderNotMet` | defined but not raised by the library itself; surfaced via `can_checkout()` as `(False, message)` |
 
 ---
 
-## Advanced Features
+## Discounts
 
-### Discounts
-
-Apply discount codes to carts with support for percentage and fixed amount discounts:
-
-```python
-from cart.cart import Cart, InvalidDiscountError
-
-cart = Cart(request)
-
-# Apply a discount code
-cart.apply_discount("SAVE20")  # 20% off
-
-# Check discount info
-discount_amount = cart.discount_amount()  # Decimal("20.00")
-discount_code = cart.discount_code()       # "SAVE20"
-
-# Remove discount
-cart.remove_discount()
-
-# Validation with Discount model
-discount = Discount.objects.get(code="SAVE20")
-is_valid, message = discount.is_valid_for_cart(cart)
-```
-
-Create discounts with various restrictions:
+Discount codes are first-class. The `Discount` model supports
+percentage and fixed-amount discounts, validity windows, usage caps,
+and minimum cart values.
 
 ```python
+from decimal import Decimal
 from cart.models import Discount, DiscountType
 
-discount = Discount.objects.create(
-    code="SUMMER2024",
+Discount.objects.create(
+    code="SUMMER25",
     discount_type=DiscountType.PERCENT,
-    value=Decimal("15.00"),        # 15% off
-    min_cart_value=Decimal("50.00"),  # Minimum order
-    max_uses=100,                  # Limited uses
+    value=Decimal("25.00"),
+    min_cart_value=Decimal("50.00"),
+    max_uses=500,
     valid_from=start_date,
     valid_until=end_date,
 )
 ```
 
-### Tax Calculator
-
-Customize tax calculation for your region:
+Apply, inspect, remove:
 
 ```python
-# settings.py
-CART_TAX_CALCULATOR = 'myapp.tax.USStateTaxCalculator'
+from cart.cart import InvalidDiscountError
 
-# myapp/tax.py
-from cart.tax import TaxCalculator
-from decimal import Decimal
+try:
+    cart.apply_discount("SUMMER25")
+except InvalidDiscountError as e:
+    print(f"Cannot apply: {e}")
 
-class USStateTax(TaxCalculator):
-    def calculate(self, cart):
-        subtotal = cart.summary()
-        return subtotal * Decimal("0.0825")  # 8.25% tax
-
-# Usage
-tax = cart.tax()  # Returns Decimal
+cart.discount_code()       # "SUMMER25"
+cart.discount_amount()     # Decimal — computed against cart.summary()
+cart.remove_discount()
 ```
 
-### Shipping Calculator
+### How usage caps are enforced
 
-Configure shipping options based on cart contents:
+```mermaid
+sequenceDiagram
+    participant V as View
+    participant C as Cart
+    participant DB as Database
+
+    V->>C: apply_discount("SUMMER25")
+    C->>DB: Discount.objects.get(code=...)
+    C->>C: discount.is_valid_for_cart(self)
+    C->>DB: cart.discount = discount
+
+    Note over V,DB: Some time passes — user browses, adds items,<br>another user may also be checking out the last use.
+
+    V->>C: checkout()
+    C->>DB: BEGIN
+    C->>DB: SELECT ... FROM Discount WHERE pk=? FOR UPDATE
+    C->>C: discount.is_valid_for_cart(self)
+
+    alt still valid
+        C->>DB: UPDATE Discount SET current_uses = current_uses + 1
+        C->>DB: UPDATE Cart SET checked_out = true
+        C->>DB: COMMIT
+        C-->>V: ok
+    else no longer valid<br>(expired, deactivated, cap reached)
+        C->>DB: ROLLBACK
+        C-->>V: raises InvalidDiscountError
+    end
+```
+
+Two concurrent checkouts of the last remaining use of a discount
+code result in exactly one success and exactly one
+`InvalidDiscountError`. The counter is never exceeded.
+
+---
+
+## Pluggable Subsystems
+
+Tax, shipping, and inventory checking each follow the same shape:
+an abstract base class, a no-op default, and a factory that reads a
+dotted path from settings.
+
+```
+cart/<subsystem>.py:
+    class <Subsystem>Base(ABC):              # your subclass inherits from this
+    class Default<Subsystem>(Base):          # safe no-op default
+    def get_<subsystem>() -> Base:           # factory, reads settings
+```
+
+> [!warning] Silent fallback on misconfiguration
+> The three subsystem factories swallow `ImportError` /
+> `AttributeError` and fall back to the default implementation. A
+> typo in `CART_TAX_CALCULATOR` yields "tax is always 0.00" at
+> runtime — no exception, no warning. Validate your dotted paths
+> in a startup check. The session adapter factory is the exception;
+> it raises loudly.
+
+### Tax
 
 ```python
 # settings.py
-CART_SHIPPING_CALCULATOR = 'myapp.shipping.FlatRateShipping'
+CART_TAX_CALCULATOR = "myapp.tax.FlatRateTax"
+```
 
-# myapp/shipping.py
-from cart.shipping import ShippingCalculator, ShippingOption
+```python
+# myapp/tax.py
 from decimal import Decimal
+from cart.tax import TaxCalculator
+from cart.cart import Cart
+
+
+class FlatRateTax(TaxCalculator):
+    def calculate(self, cart: Cart) -> Decimal:
+        return cart.summary() * Decimal("0.08")
+```
+
+Usage:
+
+```python
+cart.tax()   # → Decimal
+```
+
+The default (`DefaultTaxCalculator`) always returns
+`Decimal("0.00")`.
+
+### Shipping
+
+`ShippingCalculator` has two methods: `calculate(cart)` for the
+total cost, and `get_options(cart)` for the UI to show the user a
+list of choices.
+
+```python
+# settings.py
+CART_SHIPPING_CALCULATOR = "myapp.shipping.FlatRateShipping"
+```
+
+```python
+# myapp/shipping.py
+from decimal import Decimal
+from cart.shipping import ShippingCalculator, ShippingOption
+from cart.cart import Cart
+
 
 class FlatRateShipping(ShippingCalculator):
-    def calculate(self, cart):
-        return Decimal("9.99")
-    
-    def get_options(self, cart):
-        return [
-            {"id": "standard", "name": "Standard Shipping", "price": "9.99"},
-            {"id": "express", "name": "Express Shipping", "price": "19.99"},
-        ]
+    def calculate(self, cart: Cart) -> Decimal:
+        return Decimal("0.00") if cart.summary() >= 100 else Decimal("9.99")
 
-# Usage
-shipping_cost = cart.shipping()  # Decimal
-options = cart.shipping_options()  # List of shipping options
+    def get_options(self, cart: Cart) -> list[ShippingOption]:
+        return [
+            ShippingOption(id="standard", name="Standard (3–5 days)",
+                           price=str(self.calculate(cart))),
+            ShippingOption(id="express", name="Express (next-day)",
+                           price="19.99"),
+        ]
 ```
 
-### Inventory Checker
+```python
+cart.shipping()          # → Decimal
+cart.shipping_options()  # → list[dict]
+```
 
-Validate product availability before adding to cart:
+### Inventory
+
+Opt-in per-call with `check_inventory=True`:
 
 ```python
 # settings.py
-CART_INVENTORY_CHECKER = 'myapp.inventory.StockInventoryChecker'
+CART_INVENTORY_CHECKER = "myapp.inventory.StockChecker"
+```
 
+```python
 # myapp/inventory.py
 from cart.inventory import InventoryChecker
 
-class StockInventoryChecker(InventoryChecker):
-    def is_available(self, product, quantity):
-        return product.stock >= quantity
-    
-    def reserve(self, product, quantity):
-        product.stock -= quantity
-        product.save()
-    
-    def release(self, product, quantity):
-        product.stock += quantity
-        product.save()
 
-# Usage
+class StockChecker(InventoryChecker):
+    def check(self, product, quantity: int) -> bool:
+        return product.stock >= quantity
+
+    def reserve(self, product, quantity: int) -> bool:
+        # Atomic decrement; use F() in real code.
+        if product.stock < quantity:
+            return False
+        product.stock -= quantity
+        product.save(update_fields=["stock"])
+        return True
+```
+
+```python
 from cart.cart import InsufficientStock
 
-cart = Cart(request)
 try:
-    cart.add(product, price, quantity=10, check_inventory=True)
+    cart.add(product, unit_price=p.price, quantity=5, check_inventory=True)
 except InsufficientStock:
-    print("Not enough stock available")
+    return HttpResponseBadRequest("Not enough stock")
 ```
 
-### Cart Merge
-
-Merge guest carts into user carts upon login. Three strategies available:
-
-| Strategy | Behavior |
-|----------|----------|
-| `add` | Combine quantities (default) |
-| `replace` | Use other cart's quantities |
-| `keep_higher` | Keep maximum quantity |
-
-```python
-# Login flow example
-def login_view(request):
-    user = authenticate(request)
-    if user:
-        login(request, user)
-        
-        # Get guest cart
-        guest_cart = Cart(request)
-        
-        # Get or create user cart
-        user_carts = Cart.get_user_carts(user)
-        if user_carts.exists():
-            user_cart = Cart(request)
-            user_cart.cart = user_carts.first()
-        else:
-            user_cart = Cart(request)
-            user_cart.bind_to_user(user)
-        
-        # Merge with 'add' strategy (combines quantities)
-        user_cart.merge(guest_cart, strategy='add')
-```
-
-### User Binding
-
-Persist carts to user accounts across sessions:
-
-```python
-# Bind current cart to user
-cart = Cart(request)
-cart.bind_to_user(request.user)
-
-# Retrieve all carts for a user
-user_carts = Cart.get_user_carts(request.user)
-for cart in user_carts:
-    print(f"Cart {cart.id}: {cart.summary()}")
-```
-
-### Bulk Operations
-
-Add or update multiple items efficiently:
-
-```python
-cart = Cart(request)
-
-items = [
-    {'product': product1, 'unit_price': Decimal("10.00"), 'quantity': 2},
-    {'product': product2, 'unit_price': Decimal("20.00"), 'quantity': 1},
-    {'product': product3, 'unit_price': Decimal("30.00"), 'quantity': 3},
-]
-
-cart.add_bulk(items)  # Atomic operation
-```
-
-### Maximum Quantity Limits
-
-Restrict how many units per item:
-
-```python
-# settings.py
-CART_MAX_QUANTITY_PER_ITEM = 10
-
-# Usage
-cart.add(product, price, quantity=5)  # OK
-cart.add(product, price, quantity=15)  # Raises InvalidQuantity
-```
-
-### Price Validation
-
-Verify passed price matches product's actual price:
-
-```python
-from cart.cart import PriceMismatchError
-
-# Product with price attribute
-product.price = Decimal("19.99")
-
-# validate_price=True checks price matches
-cart.add(product, unit_price=Decimal("19.99"), quantity=1, validate_price=True)  # OK
-cart.add(product, unit_price=Decimal("9.99"), quantity=1, validate_price=True)   # Raises PriceMismatchError
-```
-
-### Caching
-
-Summary and count results are cached and automatically invalidated on changes:
-
-```python
-cart = Cart(request)
-cart.add(product, price, quantity=2)
-
-# First call calculates, subsequent calls use cache
-total = cart.summary()  # Calculated
-total = cart.summary()  # Cached
-
-# Cache invalidates automatically on:
-cart.add(product, price, quantity=1)  # Invalidates
-cart.update(product, quantity=5)      # Invalidates
-cart.remove(product)                  # Invalidates
-cart.clear()                          # Invalidates
-```
+The default (`DefaultInventoryChecker`) always returns `True`.
+`reserve()` is a method you call from your own checkout flow; the
+library's `checkout()` does not call it — see the [Checkout
+note](#checkout) above.
 
 ---
 
-## Template Integration
+## Session Storage
 
-### Cart Template
+The only state the library puts in the HTTP session is the integer
+`CART-ID`. Everything else is a database row. Which backend holds
+that integer is configurable via a single setting.
 
-```html
-{% load cart_tags %}
+```mermaid
+flowchart LR
+    classDef q fill:#0b1220,stroke:#f59e0b,color:#fef3c7
+    classDef a fill:#1f2937,stroke:#60a5fa,color:#f9fafb
 
-<h1>Your Cart</h1>
+    Q1{"Using Django's<br>session framework?"}:::q
+    Q2{"Fully stateless<br>(no server session)?"}:::q
+    Q3{"Distributed cache<br>or JWT required?"}:::q
 
-{% if cart.is_empty %}
-    <p>Your cart is empty.</p>
-{% else %}
-    <table>
-        <thead>
-            <tr>
-                <th>Product</th>
-                <th>Price</th>
-                <th>Qty</th>
-                <th>Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in cart %}
-            <tr>
-                <td>{{ item.product.name }}</td>
-                <td>{{ item.unit_price }}</td>
-                <td>{{ item.quantity }}</td>
-                <td>{{ item.total_price }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="3"><strong>Total</strong></td>
-                <td><strong>{{ cart.summary }}</strong></td>
-            </tr>
-        </tfoot>
-    </table>
-{% endif %}
+    D["DjangoSessionAdapter<br>(default)"]:::a
+    C["CookieSessionAdapter"]:::a
+    X["Custom adapter<br>(Redis, JWT, Dynamo, ...)"]:::a
+
+    Q1 -->|Yes| D
+    Q1 -->|No| Q2
+    Q2 -->|Yes| C
+    Q2 -->|No| Q3
+    Q3 -->|Yes| X
+    Q3 -->|No| D
 ```
 
-### Template Tags
+### Built-in adapters
 
-```html
-{% load cart_tags %}
-
-<p>Items: {% cart_item_count request %}</p>
-<p>Total: {% cart_summary request %}</p>
-
-{% if cart_is_empty request %}
-    <p>Empty!</p>
-{% endif %}
-
-{% cart_link request "btn btn-primary" "View Cart" %}
-```
-
----
-
-## Signals
-
-Receive notifications on cart events for analytics, logging, or integrations:
-
-### Available Signals
-
-| Signal | When Fired |
-|--------|------------|
-| `cart_item_added` | Item added or quantity increased |
-| `cart_item_removed` | Item removed from cart |
-| `cart_item_updated` | Item quantity changed |
-| `cart_checked_out` | Checkout completed |
-| `cart_cleared` | Cart emptied |
-
-### Example Handler
-
-```python
-# signals.py
-from django.dispatch import receiver
-from cart.signals import cart_item_added, cart_checked_out
-
-
-@receiver(cart_item_added)
-def on_item_added(sender, cart, product, quantity, **kwargs):
-    print(f"{quantity}x {product} added to cart {cart.id}")
-
-
-@receiver(cart_checked_out)
-def on_checkout(sender, cart, **kwargs):
-    print(f"Cart {cart.id} checked out: {cart.summary}")
-```
-
-Connect in your app's `ready()` method:
-
-```python
-# myapp/apps.py
-class MyAppConfig(AppConfig):
-    name = "myapp"
-
-    def ready(self):
-        import myapp.signals  # noqa: F401
-```
-
----
-
-## Session Adapters
-
-Control where the cart ID is stored:
-
-### Built-in Adapters
-
-| Adapter | Use Case |
+| Adapter | Use case |
 |---------|----------|
-| `DjangoSessionAdapter` | Default Django sessions |
-| `CookieSessionAdapter` | Cookie-based (no server sessions) |
+| `DjangoSessionAdapter` (default) | Standard Django sessions (DB, cache, signed cookies — any `SESSION_ENGINE`). |
+| `CookieSessionAdapter` | Fully stateless: stores the cart id in an HTTP cookie, reads it back on the next request. |
 
-### Using Cookie Storage
+### Selecting an adapter
 
 ```python
-# settings.py
-from cart.session import CookieSessionAdapter
+# settings.py — dotted string
+CARTS_SESSION_ADAPTER_CLASS = "cart.session.CookieSessionAdapter"
 
+# or — class object
+from cart.session import CookieSessionAdapter
 CARTS_SESSION_ADAPTER_CLASS = CookieSessionAdapter
 ```
 
-### Custom Adapter
+Both forms work. A typo in the dotted path raises `ImportError`
+loudly — this is the one subsystem factory that does **not** fall
+back silently.
+
+### Custom adapter
+
+Subclass `CartSessionAdapter` and implement its five abstract
+methods. The real interface is `get` / `set` / `delete` /
+`get_or_create_cart_id` / `set_cart_id` — each documented on the
+base class.
 
 ```python
 # myapp/session.py
+from typing import Any
 from cart.session import CartSessionAdapter
+from cart.cart import CART_ID
+
 
 class RedisSessionAdapter(CartSessionAdapter):
     def __init__(self, request):
-        super().__init__(request)
         import redis
-        self.redis = redis.Redis(host="localhost", port=6379)
+        self._r = redis.StrictRedis(host="localhost", port=6379, db=0)
+        self._key = f"cart:{request.session.session_key}"
 
-    def _get_session_key(self):
-        return f"cart:{self.request.session.session_key}"
+    def get(self, key: str, default: Any = None) -> Any:
+        value = self._r.hget(self._key, key)
+        return value.decode() if value else default
 
-    def _set_session_key(self, value):
-        self.redis.set(self._get_session_key(), value)
+    def set(self, key: str, value: Any) -> None:
+        self._r.hset(self._key, key, str(value))
 
-    def _del_session_key(self):
-        self.redis.delete(self._get_session_key())
+    def delete(self, key: str) -> None:
+        self._r.hdel(self._key, key)
+
+    def get_or_create_cart_id(self) -> int | None:
+        value = self.get(CART_ID)
+        try:
+            return int(value) if value else None
+        except (ValueError, TypeError):
+            return None
+
+    def set_cart_id(self, cart_id: int) -> None:
+        self.set(CART_ID, cart_id)
 ```
 
 ```python
@@ -624,165 +693,349 @@ class RedisSessionAdapter(CartSessionAdapter):
 CARTS_SESSION_ADAPTER_CLASS = "myapp.session.RedisSessionAdapter"
 ```
 
----
-
-## Database Optimization
-
-### Indexes
-
-Cart automatically uses database indexes for efficient queries on common patterns (cart ID, content type, object ID).
-
-### Avoiding N+1 Queries
-
-The `Item.product` property is cached to prevent repeated database hits:
-
-```python
-# Efficient - single query per item
-for item in cart:
-    print(item.product.name)  # Cached after first access
-```
-
-### Serialization for APIs
-
-```python
-# JSON-safe dictionary for API responses
-data = cart.cart_serializable()
-# Returns: {'123': {'quantity': 2, 'unit_price': '9.99', 'total_price': '19.98'}, ...}
-```
+See [`docs/AGENTS.md`](docs/AGENTS.md) for a prompt-ready version
+of this pattern.
 
 ---
 
-## Maintenance
+## Signals
 
-### Cleaning Old Carts
+Five optional signals let you observe cart events without
+monkey-patching. Importing `cart.signals` is not required — if the
+module is missing at import time, the cart still works and no
+signals fire.
 
-Remove abandoned carts from your database:
+| Signal | Payload (`kwargs`) | Fired by |
+|--------|---------------------|----------|
+| `cart_item_added` | `cart`, `item` | `Cart.add()` on success |
+| `cart_item_removed` | `cart`, `product` | `Cart.remove()` on success |
+| `cart_item_updated` | `cart`, `item`, `deleted` (bool) | `Cart.update()` on success |
+| `cart_checked_out` | `cart` | `Cart.checkout()` — only once per cart |
+| `cart_cleared` | `cart` | `Cart.clear()` on success |
+
+Wire handlers in your app's `ready()`:
+
+```python
+# myapp/apps.py
+from django.apps import AppConfig
+
+
+class MyAppConfig(AppConfig):
+    name = "myapp"
+
+    def ready(self):
+        import myapp.signals  # noqa: F401
+```
+
+```python
+# myapp/signals.py
+from django.dispatch import receiver
+from cart.signals import cart_item_added, cart_checked_out
+
+
+@receiver(cart_item_added)
+def record_add(sender, cart, item, **kwargs):
+    # Analytics, audit log, inventory decrement, etc.
+    ...
+
+
+@receiver(cart_checked_out)
+def send_confirmation(sender, cart, **kwargs):
+    ...
+```
+
+---
+
+## Template Tags
+
+Load once per template, then use in any context that has `request`
+(the default Django context processor makes this automatic if
+`django.template.context_processors.request` is in `TEMPLATES →
+OPTIONS → context_processors`).
+
+```django
+{% load cart_tags %}
+```
+
+| Tag | Signature | Returns |
+|-----|-----------|---------|
+| `{% cart_item_count %}` | no arguments | integer |
+| `{% cart_summary %}` | no arguments | formatted string, e.g. `$19.98` |
+| `{% cart_is_empty %}` | no arguments | boolean |
+| `{% cart_link "Label" "css-class" %}` | `text`, `css_class` — both optional | HTML `<a>` tag |
+
+All four tags declare `takes_context=True` and read `request` from
+the template context. Do not pass `request` positionally.
+
+Example header snippet:
+
+```django
+{% load cart_tags %}
+
+<header>
+  <nav>
+    <a href="/">Shop</a>
+    {% cart_link "Cart" "nav-btn" %}
+    <span class="badge">{% cart_item_count %}</span>
+    <span class="total">{% cart_summary %}</span>
+  </nav>
+</header>
+```
+
+Capture a tag's return value with `as`:
+
+```django
+{% cart_item_count as count %}
+{% if count %}
+  <span class="badge">{{ count }}</span>
+{% endif %}
+```
+
+---
+
+## Settings Reference
+
+All settings are optional. Defaults apply when a setting is absent
+or `None`.
+
+| Setting | Type | Default | Purpose |
+|---------|------|---------|---------|
+| `CART_TAX_CALCULATOR` | dotted path or class | `DefaultTaxCalculator` → `Decimal("0.00")` | Tax calculator class. See [Tax](#tax). |
+| `CART_SHIPPING_CALCULATOR` | dotted path or class | `DefaultShippingCalculator` → `Decimal("0.00")`, one "free" option | Shipping calculator class. See [Shipping](#shipping). |
+| `CART_INVENTORY_CHECKER` | dotted path or class | `DefaultInventoryChecker` → always `True` | Inventory checker class. See [Inventory](#inventory). |
+| `CARTS_SESSION_ADAPTER_CLASS` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). |
+| `CART_MAX_QUANTITY_PER_ITEM` | int or `None` | `None` (unlimited) | Cap on `item.quantity`. Exceeding raises `InvalidQuantity`. |
+| `CART_MIN_ORDER_AMOUNT` | `Decimal` or `None` | `None` (no minimum) | Minimum `cart.summary()` required for `can_checkout()` to return `True`. |
+
+---
+
+## Admin Integration
+
+`cart/admin.py` registers `Cart` with an inline `Item` editor.
+`Item` is visible through the cart edit page — not as a top-level
+model — which matches how you typically want to inspect a cart.
+
+> [!note] `Discount` is not registered
+> The `Discount` model is intentionally not registered in the
+> library's admin, because a storefront often wants custom admin
+> views (bulk CSV import, per-campaign grouping, voucher
+> generators). Register it yourself:
+>
+> ```python
+> # myapp/admin.py
+> from django.contrib import admin
+> from cart.models import Discount
+>
+>
+> @admin.register(Discount)
+> class DiscountAdmin(admin.ModelAdmin):
+>     list_display = ("code", "discount_type", "value",
+>                     "current_uses", "max_uses", "active",
+>                     "valid_until")
+>     list_filter = ("active", "discount_type")
+>     search_fields = ("code",)
+>     readonly_fields = ("current_uses",)
+> ```
+
+---
+
+## Operations
+
+### Pruning abandoned carts
+
+Abandoned carts accumulate. The `clean_carts` management command
+removes them:
 
 ```bash
-# Delete unchecked-out carts older than 90 days (default)
-python manage.py clean_carts
-
-# Custom retention period
-python manage.py clean_carts --days 30
-
-# Include checked-out carts
-python manage.py clean_carts --days 60 --include-checked-out
-
-# Preview only
+python manage.py clean_carts                    # default: unchecked-out, >90 days old
+python manage.py clean_carts --days 30          # custom retention
 python manage.py clean_carts --days 30 --dry-run
+python manage.py clean_carts --days 60 --include-checked-out
 ```
 
-### Scheduling with Cron
+Schedule with cron:
 
 ```cron
-# Run daily at 2 AM
-0 2 * * * /path/to/venv/bin/python /path/to/project/manage.py clean_carts --days 30 >> /var/log/clean_carts.log 2>&1
+# Nightly at 02:00
+0 2 * * * /path/to/venv/bin/python /path/to/project/manage.py clean_carts --days 30
 ```
 
-### Celery Alternative
+Or Celery:
 
 ```python
-# tasks.py
+# myapp/tasks.py
 from celery import shared_task
 from django.core.management import call_command
 
+
 @shared_task
-def clean_old_carts():
+def prune_abandoned_carts():
     call_command("clean_carts", days=30)
 ```
 
 ---
 
-## Testing
+## Agent-Ready
 
-Install the dev extras (includes pytest + pytest-django + coverage):
+`django-cart` is designed to be **extended by coding agents on the
+first pass**. Three properties make that possible:
 
-```bash
-pip install -e ".[dev]"
+1. **Small surface.** The public API is under 1000 lines across
+   four files and fits entirely in a single agent context window.
+2. **Explicit extension points.** Every subsystem is a settings
+   dotted-path pointing at a subclass of a clearly-typed abstract
+   base. No registries, no decorators, no magic.
+3. **Stable contracts.** Public names are preserved across patch
+   and minor releases. The same prompt that works today works on
+   the next minor.
+
+A minimum working example — generating a custom tax calculator with
+Claude:
+
+```text
+Prompt:
+
+  In my Django project I use django-cart. Generate a TaxCalculator
+  subclass that applies 7.25% tax if the cart's `summary()` is
+  above $100 and 5% otherwise. Wire it in through settings and
+  write a pytest that asserts both branches.
+
+Expected output:
+  - myapp/tax.py with `class Tiered(TaxCalculator)` returning Decimal
+  - settings.py with CART_TAX_CALCULATOR set to its dotted path
+  - tests/test_tax.py with two test functions exercising both branches
 ```
 
-### Run All Tests
-
-```bash
-pytest
-```
-
-### Run Specific Tests
-
-```bash
-pytest tests/test_cart_add.py
-pytest tests/test_cart_add.py::test_add_new_product_stores_the_quantity
-```
-
-### Test Coverage
-
-```bash
-coverage run -m pytest
-coverage report
-coverage html  # HTML report in htmlcov/
-```
-
-The coverage config sets an advisory floor of 90% (`fail_under = 90`
-in `pyproject.toml`) — `coverage report` exits non-zero below that
-threshold as a local warning. CI does not enforce a coverage gate.
-
-### What Gets Tested
-
-- All cart operations (add, remove, update, clear, checkout)
-- Error handling (InvalidQuantity, ItemDoesNotExist)
-- Edge cases (empty cart, concurrent modifications)
-- Signals and template tags
-- Session adapters
-- Integration with Django
+For the full agentic extension guide — prompt templates, review
+checklist, sharp edges, verification steps — see
+**[`docs/AGENTS.md`](docs/AGENTS.md)**.
 
 ---
 
-## Developer Setup
+## Data Model
 
-### Pre-commit Hooks
+Three models, one generic FK, a handful of indexes.
+
+```mermaid
+erDiagram
+    Cart ||--o{ Item : "has many"
+    Cart }o--|| Discount : "optional FK (nullable)"
+    Item }o..|| PRODUCT : "GenericFK<br>content_type + object_id"
+
+    Cart {
+        int id PK
+        datetime creation_date
+        bool checked_out
+        int user_id FK "nullable"
+        int discount_id FK "nullable"
+    }
+
+    Item {
+        int id PK
+        int cart_id FK
+        int content_type_id FK
+        int object_id
+        int quantity "PositiveInteger"
+        decimal unit_price "max_digits=18, dp=2"
+    }
+
+    Discount {
+        int id PK
+        string code UK
+        string discount_type "percent or fixed"
+        decimal value
+        decimal min_cart_value "nullable"
+        int max_uses "nullable"
+        int current_uses
+        bool active
+        datetime valid_from "nullable"
+        datetime valid_until "nullable"
+    }
+
+    PRODUCT {
+        any_model your_existing_product "no changes required"
+    }
+```
+
+`Item` has `unique_together` on `(cart, content_type, object_id)`
+and a composite index on the same triple — so `cart.add(p)` is
+always one primary-key lookup.
+
+---
+
+## Testing django-cart
+
+> [!note] Contributors only
+> This section is for working **on** the library. Application code
+> consuming `django-cart` does not need any of this.
+
+`django-cart` uses `pytest` + `pytest-django` exclusively — there
+is no `unittest.TestCase` subclassing, no `runtests.py`. Fixtures
+live in `tests/conftest.py`; helpers are never defined inside test
+files.
 
 ```bash
-pip install pre-commit
-pre-commit install
+uv venv
+uv pip install -e ".[dev]"
+uv run pytest
 ```
 
-Hooks: black (formatting), isort (imports), flake8 (linting), mypy (type checking)
-
-### Dependencies
+Run a single file or test:
 
 ```bash
-pip install -e ".[dev]"
+uv run pytest tests/test_cart_add.py
+uv run pytest tests/test_cart_add.py::test_add_new_product_stores_the_quantity
 ```
 
-### Project Structure
+Coverage:
 
+```bash
+uv run coverage run -m pytest
+uv run coverage report            # advisory floor: 90% (local only)
+uv run coverage html               # → htmlcov/
 ```
-cart/
-├── __init__.py
-├── admin.py          # Django admin integration
-├── apps.py           # App configuration
-├── cart.py           # Main Cart class
-├── models.py         # Cart and Item models
-├── signals.py        # Cart event signals
-├── session.py        # Session adapters
-├── templatetags/
-│   └── cart_tags.py  # Template tags
-└── management/
-    └── commands/
-        └── clean_carts.py
-```
+
+See [`tests/README.md`](tests/README.md) for the full test pattern,
+fixture catalogue, and guidance on writing behavioural (not
+reflection) tests.
 
 ---
 
 ## Requirements
 
-| Dependency | Version |
-|------------|---------|
-| Python | 3.10+ |
-| Django | 4.2+ |
+**Python 3.10+, Django 4.2+.**
+
+The CI matrix exercises the full range up to Python 3.14 and
+Django 6.0.
 
 ---
 
-## License
+## What's Next
 
-LGPL-3.0
+> [!tip] Near-future roadmap item — high-precision decimal representation
+> A roadmap slot is reserved for cryptocurrency-style fractional
+> quantities — representing tiny fractions of a product (e.g. a
+> `Coin` model) denominated in long decimals with satoshi- or
+> wei-level precision. The cart stays a collection of `(product,
+> quantity, unit_price)` triples; only the numeric precision
+> changes. Design doc required before implementation. Details and
+> candidate shapes in
+> [`docs/ROADMAP_2026_04.md` §P3-10](docs/ROADMAP_2026_04.md).
+>
+> *This is a scope marker, not a commitment.* See the roadmap for
+> the authoritative per-release plan.
+
+---
+
+## Changelog, Roadmap, License
+
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — Keep-a-Changelog
+  format.
+- **Roadmap of record:** [`docs/ROADMAP_2026_04.md`](docs/ROADMAP_2026_04.md).
+- **License:** LGPL-3.0. See [`LICENSE`](LICENSE).
+
+Contributions welcome. The library is small on purpose — if a
+feature fits the "session-backed cart" mission, open an issue or
+PR. For experimental / speculative work, prefer a downstream
+package that extends `django-cart` via its public API rather than
+forking.
