@@ -76,12 +76,16 @@ def test_default_inventory_checker_reserve_returns_true():
 
 
 @pytest.mark.django_db
-def test_get_inventory_checker_falls_back_to_default_when_class_path_is_bad(settings):
-    """Covers cart/inventory.py:158-159 — ImportError/AttributeError
-    fallback. P1-4 adds a warning log around this."""
+def test_get_inventory_checker_warns_and_falls_back_when_class_path_is_bad(settings):
+    """P2 regression: misconfigured ``CART_INVENTORY_CHECKER`` used to
+    silently collapse to the always-True default — a typo produced
+    "inventory never blocks" without a log entry. The factory now
+    emits a :class:`RuntimeWarning` naming the setting before falling
+    back to the default."""
     settings.CART_INVENTORY_CHECKER = "nonexistent.module.FakeChecker"
 
-    checker = get_inventory_checker()
+    with pytest.warns(RuntimeWarning, match="CART_INVENTORY_CHECKER"):
+        checker = get_inventory_checker()
 
     assert isinstance(checker, DefaultInventoryChecker)
 

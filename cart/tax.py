@@ -17,6 +17,7 @@ Usage:
        tax = cart.tax()  # Returns Decimal
 """
 
+import warnings
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -94,5 +95,12 @@ def get_tax_calculator() -> TaxCalculator:
     try:
         calculator_class = import_string(calculator_path)
         return calculator_class()
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError) as exc:
+        warnings.warn(
+            f"CART_TAX_CALCULATOR={calculator_path!r} could not be imported "
+            f"({exc.__class__.__name__}: {exc}). Falling back to "
+            f"DefaultTaxCalculator (zero tax).",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return DefaultTaxCalculator()

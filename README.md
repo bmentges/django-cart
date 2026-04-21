@@ -497,13 +497,15 @@ cart/<subsystem>.py:
     def get_<subsystem>() -> Base:           # factory, reads settings
 ```
 
-> [!warning] Silent fallback on misconfiguration
-> The three subsystem factories swallow `ImportError` /
-> `AttributeError` and fall back to the default implementation. A
-> typo in `CART_TAX_CALCULATOR` yields "tax is always 0.00" at
-> runtime — no exception, no warning. Validate your dotted paths
-> in a startup check. The session adapter factory is the exception;
-> it raises loudly.
+> [!warning] Fallback on misconfiguration is a `RuntimeWarning`
+> A bad dotted path in `CART_TAX_CALCULATOR`, `CART_SHIPPING_CALCULATOR`,
+> or `CART_INVENTORY_CHECKER` falls back to the default implementation
+> rather than raising — but each factory now emits a
+> `RuntimeWarning` naming the setting, the bad path, and the
+> underlying `ImportError` / `AttributeError`. Promote those to
+> errors in dev with `python -W error::RuntimeWarning` or Django's
+> logging config. The session adapter factory is still the strict
+> exception — it raises `ImportError` loudly.
 
 ### Tax
 

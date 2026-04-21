@@ -25,6 +25,7 @@ Usage:
        cart.add(product, price, quantity=2, check_inventory=True)
 """
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
@@ -155,5 +156,12 @@ def get_inventory_checker() -> InventoryChecker:
     try:
         checker_class = import_string(checker_path)
         return checker_class()
-    except (ImportError, AttributeError):
+    except (ImportError, AttributeError) as exc:
+        warnings.warn(
+            f"CART_INVENTORY_CHECKER={checker_path!r} could not be imported "
+            f"({exc.__class__.__name__}: {exc}). Falling back to "
+            f"DefaultInventoryChecker (always allows).",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return DefaultInventoryChecker()

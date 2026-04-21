@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.db import transaction
@@ -431,18 +431,24 @@ class Cart:
                     "unit_price": "9.99",
                     "total_price": "19.98",
                 },
-                ...
+                "__discount__": {"code": "SUMMER25"},
             }
 
-        Keys are ``"<content_type_id>:<object_id>"`` composites (P1-D
-        fix, v3.0.13). The pre-v3.0.13 format used the bare
+        Item keys are ``"<content_type_id>:<object_id>"`` composites
+        (P1-D fix, v3.0.13). The pre-v3.0.13 format used the bare
         ``str(object_id)`` as the key, which silently collapsed items
         with the same PK across different product models.
         :meth:`from_serializable` accepts both formats — legacy
         consumers that stored payloads before v3.0.13 keep working as
         long as each value carries ``content_type_id``.
+
+        Reserved keys (all prefixed ``__…__``) carry cart-level state
+        alongside the items. Today that's only ``__discount__`` — the
+        code of the applied :class:`Discount`, if any. User binding is
+        intentionally *not* serialised: re-bind on login via
+        :meth:`bind_to_user` rather than trusting restore-side data.
         """
-        return {
+        payload: dict = {
             f"{item.content_type_id}:{item.object_id}": {
                 "content_type_id": item.content_type_id,
                 "object_id": item.object_id,
@@ -452,6 +458,9 @@ class Cart:
             }
             for item in self.cart.items.all()
         }
+        if self.cart.discount is not None:
+            payload["__discount__"] = {"code": self.cart.discount.code}
+        return payload
 
     @classmethod
     def from_serializable(cls, request, data: dict) -> "Cart":
@@ -485,6 +494,8 @@ class Cart:
         cart = cls(request)
         with transaction.atomic():
             for key, item_data in data.items():
+                if key.startswith("__") and key.endswith("__"):
+                    continue  # reserved cart-level metadata, handled below
                 content_type_id, object_id = _parse_serializable_key(key, item_data)
 
                 item = models.Item.objects.filter(
@@ -506,6 +517,19 @@ class Cart:
                     quantity=item_data.get("quantity", 1),
                     unit_price=Decimal(item_data.get("unit_price", "0.00")),
                 )
+
+            discount_data = data.get("__discount__")
+            if discount_data:
+                code = discount_data.get("code")
+                if code:
+                    # Silent-skip if the discount no longer exists —
+                    # expired-cleanup / admin-deletion between serialise
+                    # and restore is a real scenario; raising here would
+                    # drop the entire cart on the floor.
+                    discount = models.Discount.objects.filter(code=code).first()
+                    if discount is not None:
+                        cart.cart.discount = discount
+                        cart.cart.save(update_fields=["discount"])
 
         cart._invalidate_cache()
         return cart
@@ -786,8 +810,17 @@ class Cart:
         """
         Calculate the total cart value including discounts, tax, and shipping.
 
+        The returned value is always quantized to two decimal places
+        with ``ROUND_HALF_UP``. Aggregating ``subtotal``, ``discount``,
+        ``tax``, and ``shipping`` can produce long-tail digits when any
+        of them is a computed rate (e.g. a compound tax), and leaking
+        that noise into display or downstream storage surprises
+        consumers who assume 2dp. Rounding at the boundary keeps every
+        caller on the same footing.
+
         Returns:
-            Decimal: The final total amount.
+            Decimal: The final total amount, quantized to 2dp, never
+            negative.
 
         Example::
 
@@ -799,4 +832,5 @@ class Cart:
         shipping = self.shipping()
 
         total = subtotal - discount + tax + shipping
-        return max(total, Decimal("0.00"))
+        total = max(total, Decimal("0.00"))
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
