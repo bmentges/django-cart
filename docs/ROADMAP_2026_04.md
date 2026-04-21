@@ -1135,8 +1135,9 @@ calendar deadlines beyond "4.0 no sooner than October 2026".
   deliberately framework-agnostic at the view layer.
 - Migrating away from `ContentType` generic FKs. It's the headline feature.
 - Supporting Django <4.2 or Python <3.10. Already dropped.
-- Replacing LGPL-3.0 with a more permissive license. Maintainer-only
-  decision.
+- ~~Replacing LGPL-3.0 with a more permissive license. Maintainer-only
+  decision.~~ **Done** in v3.0.11 — relicensed to MIT. See
+  `CHANGELOG.md` [Unreleased] / [3.0.11].
 
 ---
 

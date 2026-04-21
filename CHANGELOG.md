@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Merged to `master` but not yet tagged on PyPI.
 
+### Changed — Licensing
+
+- **Relicensed from LGPL-3.0 to MIT.** Downstream projects can now
+  embed, modify, and redistribute `django-cart` under any license
+  compatible with MIT (including proprietary). The only requirement
+  is to preserve the copyright notice and the permission notice in
+  substantial copies. Prior tagged releases (v2.x and v3.0.0
+  through v3.0.10) remain available under LGPL-3.0; only v3.0.11
+  onward is MIT-licensed.
+
 ### Added
 - `cart_serializable()` output now includes `content_type_id` per item so
   the payload is self-describing and can restore into a fresh cart.
@@ -17,6 +27,15 @@ Merged to `master` but not yet tagged on PyPI.
 - CHANGELOG backfilled for v3.0.0–v3.0.10; adopted Keep-a-Changelog
   headings. Added CI step that fails if `CHANGELOG.md` does not mention
   the current `pyproject.toml` version.
+- Full README rewrite (educational tone, engineers + agents audience,
+  five Mermaid diagrams, corrected template-tag signatures, correct
+  custom session-adapter interface).
+- `docs/AGENTS.md` — guide for coding-agent-driven extension of
+  downstream projects that use `django-cart`.
+- Roadmap `docs/ROADMAP_2026_04.md` §P3-10 reserves a slot for
+  high-precision decimal representation (cryptocurrency-style
+  fractional quantities) as a near-future feature. No code change
+  yet.
 
 ### Changed
 - `Cart.checkout()` is now idempotent — calling it twice on the same

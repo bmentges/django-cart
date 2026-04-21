@@ -2,7 +2,7 @@
 ![PyPI](https://img.shields.io/pypi/v/django-cart?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-informational?style=for-the-badge&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-4.2%2B-0C4B33?style=for-the-badge&logo=django&logoColor=white)
-![License](https://img.shields.io/badge/License-LGPL--3.0-8A2BE2?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
 # django-cart
 
@@ -1032,7 +1032,8 @@ Django 6.0.
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — Keep-a-Changelog
   format.
 - **Roadmap of record:** [`docs/ROADMAP_2026_04.md`](docs/ROADMAP_2026_04.md).
-- **License:** LGPL-3.0. See [`LICENSE`](LICENSE).
+- **License:** MIT. See [`LICENSE`](LICENSE). (Relicensed from
+  LGPL-3.0 in v3.0.11 — see `CHANGELOG.md`.)
 
 Contributions welcome. The library is small on purpose — if a
 feature fits the "session-backed cart" mission, open an issue or
