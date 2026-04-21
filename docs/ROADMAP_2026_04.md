@@ -776,14 +776,18 @@ through v2.2.13).
 v3.0.3 (shipped 2026-04-20) → P-1 Phase 0: pytest scaffolding,
                               conftest fixtures, canonical pattern doc.
                               No behaviour change. No API change.
-v3.0.4 (this PR)            → P-1 Phase 1: migrate test_session.py to
+v3.0.4 (pending — PR #53)   → P-1 Phase 1: migrate test_session.py to
                               tests/test_session_adapters.py as the
                               reference pytest example. Delete the
                               reflection test. No behaviour change.
-v3.0.5 (patch)              → P-1 Phase 2: migrate test_signals.py,
-                              test_templatetags.py, test_performance.py
-                              (the last dropping wall-clock assertions
-                              for django_assert_num_queries).
+v3.0.5 (this PR)            → P-1 Phase 2: migrate test_signals.py,
+                              test_templatetags.py, test_performance.py.
+                              Wall-clock perf assertions replaced with
+                              django_assert_num_queries /
+                              django_assert_max_num_queries bounds
+                              (reproducible across hardware; catches
+                              N+1 regressions that wall clock can mask).
+                              No behaviour change.
 v3.0.6 (patch)              → P-1 Phase 3: replace test_integration.py
                               (MagicMock-based) with a real HTTP test
                               suite via Django's test client.
