@@ -1,4 +1,5 @@
 """Cart class initialisation and session wiring."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,7 +7,6 @@ from django.test import RequestFactory
 
 from cart.cart import CART_ID, Cart
 from cart.session import CartSessionAdapter
-
 
 pytestmark = pytest.mark.django_db
 
@@ -122,9 +122,7 @@ def test_adapter_receives_the_new_cart_id_on_creation(settings, rf_request):
     assert ("set_cart_id", cart.cart.pk) in _RecordingSessionAdapter.calls
 
 
-def test_setting_accepts_a_class_object_not_just_a_dotted_string(
-    settings, rf_request
-):
+def test_setting_accepts_a_class_object_not_just_a_dotted_string(settings, rf_request):
     """The README advertises both
     ``CARTS_SESSION_ADAPTER_CLASS = MyAdapter`` and
     ``= "dotted.path.MyAdapter"`` — both must work."""

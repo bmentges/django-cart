@@ -1,4 +1,5 @@
 """ShippingCalculator behaviour: default, interface, settings-based lookup."""
+
 from __future__ import annotations
 
 from decimal import Decimal

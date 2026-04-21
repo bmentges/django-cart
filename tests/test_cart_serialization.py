@@ -10,6 +10,7 @@ explicitly so consumers don't need to parse keys.
 legacy plain-object_id format, provided the legacy payload carries
 ``content_type_id`` in each value (required for the P0-1 contract).
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -17,7 +18,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import Cart
-
 
 pytestmark = pytest.mark.django_db
 
@@ -33,6 +33,7 @@ def _composite_key(product) -> str:
 # --------------------------------------------------------------------------- #
 # cart_serializable — structure and content
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_serializable_structure(cart, product):
     cart.add(product, Decimal("15.00"), quantity=2)
@@ -90,6 +91,7 @@ def test_cart_serializable_value_types_are_int_and_string(cart, product):
 # from_serializable — updates existing items on same session
 # --------------------------------------------------------------------------- #
 
+
 def test_from_serializable_updates_existing_items_quantity_and_price(
     cart, product, rf_request
 ):
@@ -118,7 +120,9 @@ def test_from_serializable_partial_update_keeps_unit_price(cart, product, rf_req
     assert item.unit_price == Decimal("5.00")
 
 
-def test_from_serializable_with_empty_data_leaves_cart_untouched(cart, product, rf_request):
+def test_from_serializable_with_empty_data_leaves_cart_untouched(
+    cart, product, rf_request
+):
     cart.add(product, Decimal("5.00"), quantity=1)
 
     restored = Cart.from_serializable(rf_request, {})
@@ -130,10 +134,12 @@ def test_from_serializable_with_empty_data_leaves_cart_untouched(cart, product, 
 # P0-1: from_serializable restores items on a fresh cart (fixed in v3.0.11)
 # --------------------------------------------------------------------------- #
 
+
 def test_from_serializable_is_not_a_silent_noop_on_fresh_cart(rf_request, product):
     """Calling from_serializable with items on a brand-new cart must
     populate it (P0-1 fix — pre-v3.0.11 this was a silent no-op)."""
     from django.contrib.contenttypes.models import ContentType
+
     from tests.test_app.models import FakeProduct
 
     ct = ContentType.objects.get_for_model(FakeProduct)
@@ -159,6 +165,7 @@ def test_cart_serializable_includes_content_type_id(cart, product):
     """The v3.0.11 output format includes content_type_id so payloads
     can be fed to from_serializable on a fresh cart."""
     from django.contrib.contenttypes.models import ContentType
+
     from tests.test_app.models import FakeProduct
 
     cart.add(product, Decimal("10.00"), quantity=1)
@@ -210,6 +217,7 @@ def test_from_serializable_raises_clear_error_on_legacy_payload(rf_request, prod
 # See docs/ANALYSIS.md §4.5.
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_serializable_keeps_both_items_with_same_object_id_across_content_types(
     cart, rf_request
 ):
@@ -231,6 +239,7 @@ def test_from_serializable_update_does_not_cross_content_types(cart, rf_request)
     """Updating the FakeProductNoPrice item by (content_type_id, object_id)
     must not touch the FakeProduct item that shares its object_id."""
     from django.contrib.contenttypes.models import ContentType
+
     from tests.test_app.models import FakeProduct, FakeProductNoPrice
 
     p1 = FakeProduct.objects.create(pk=200, name="Physical", price=Decimal("5.00"))
@@ -262,6 +271,7 @@ def test_from_serializable_accepts_legacy_object_id_keys(rf_request, product):
     restores as long as the value carries ``content_type_id``. Consumers
     that stored payloads before v3.0.13 must keep working."""
     from django.contrib.contenttypes.models import ContentType
+
     from tests.test_app.models import FakeProduct
 
     ct = ContentType.objects.get_for_model(FakeProduct)
@@ -292,6 +302,7 @@ def test_from_serializable_accepts_legacy_object_id_keys(rf_request, product):
 # matching Discount row. See docs/ANALYSIS.md §0 (P2 list).
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_serializable_emits_applied_discount_code(cart, product):
     from cart.models import Discount, DiscountType
 
@@ -321,6 +332,7 @@ def test_cart_serializable_emits_null_discount_when_none_applied(cart, product):
 
 def test_round_trip_reattaches_applied_discount(cart, product):
     from django.test import RequestFactory
+
     from cart.models import Discount, DiscountType
 
     Discount.objects.create(
@@ -345,6 +357,7 @@ def test_round_trip_skips_silently_if_referenced_discount_deleted(cart, product)
     Silent skip is safer — the cart restores without a discount and
     the caller can decide whether to surface the miss."""
     from django.test import RequestFactory
+
     from cart.models import Discount, DiscountType
 
     Discount.objects.create(

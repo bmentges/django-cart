@@ -10,11 +10,10 @@ The bounds are upper bounds — passing with fewer queries is fine. If a
 future change lowers the steady-state count (e.g. a batch product
 loader for ``Cart.__iter__``), tighten the bound in the same PR.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
-
-import pytest
 
 
 def test_add_is_query_bounded_per_item(

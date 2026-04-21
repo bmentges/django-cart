@@ -16,6 +16,7 @@ added here — the ``CheckConstraint(check=…)`` / ``…(condition=…)``
 kwarg renamed between Django 5.0 and 6.0 and the supported matrix
 spans both; the DB constraint will follow once 4.2 drops off.
 """
+
 import django.utils.timezone
 from django.core.validators import MinValueValidator
 from django.db import migrations, models

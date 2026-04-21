@@ -11,7 +11,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 if TYPE_CHECKING:
-    from django.contrib.auth import get_user_model
     from django.db.models import Model
 
 
@@ -58,7 +57,9 @@ class ItemManager(models.Manager["Item"]):
     def _inject_content_type(self, kwargs: dict) -> dict:
         if "product" in kwargs:
             product = kwargs.pop("product")
-            kwargs["content_type"] = ContentType.objects.get_for_model(product._meta.model)
+            kwargs["content_type"] = ContentType.objects.get_for_model(
+                product._meta.model
+            )
             kwargs["object_id"] = product.pk
         return kwargs
 
@@ -72,9 +73,7 @@ class ItemManager(models.Manager["Item"]):
 
 
 class Item(models.Model):
-    cart = models.ForeignKey[
-        "Cart", "Item"
-    ](
+    cart = models.ForeignKey["Cart", "Item"](
         Cart,
         verbose_name=_("cart"),
         on_delete=models.CASCADE,
@@ -115,7 +114,9 @@ class Item(models.Model):
     @property
     def product(self) -> "Model":
         if not hasattr(self, "_product_cache"):
-            self._product_cache = self.content_type.model_class().objects.get(pk=self.object_id)
+            self._product_cache = self.content_type.model_class().objects.get(
+                pk=self.object_id
+            )
         return self._product_cache
 
     @product.setter
@@ -162,7 +163,9 @@ class Discount(models.Model):
         null=True,
         blank=True,
         verbose_name=_("maximum uses"),
-        help_text=_("Maximum number of times this discount can be used (null for unlimited)"),
+        help_text=_(
+            "Maximum number of times this discount can be used (null for unlimited)"
+        ),
     )
     current_uses = models.PositiveIntegerField(
         default=0,
@@ -193,10 +196,10 @@ class Discount(models.Model):
 
     def is_valid_for_cart(self, cart: "Cart") -> tuple[bool, str]:
         """Check if the discount is valid for the given cart.
-        
+
         Args:
             cart: The cart to validate against.
-            
+
         Returns:
             A tuple of (is_valid, message).
         """
@@ -291,6 +294,4 @@ class Discount(models.Model):
         The in-memory ``self.current_uses`` attribute is stale after this
         call — call ``refresh_from_db()`` if you need the new value.
         """
-        Discount.objects.filter(pk=self.pk).update(
-            current_uses=F("current_uses") + 1
-        )
+        Discount.objects.filter(pk=self.pk).update(current_uses=F("current_uses") + 1)

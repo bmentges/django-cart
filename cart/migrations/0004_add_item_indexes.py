@@ -10,6 +10,9 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddIndex(
             model_name="item",
-            index=models.Index(fields=["cart", "content_type", "object_id"], name="cart_item_cart_id_content"),
+            index=models.Index(
+                fields=["cart", "content_type", "object_id"],
+                name="cart_item_cart_id_content",
+            ),
         ),
     ]

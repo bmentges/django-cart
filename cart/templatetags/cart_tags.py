@@ -7,7 +7,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html
 
 from ..cart import CART_ID
-from ..models import Cart as CartModel, Item
+from ..models import Item
 
 register = template.Library()
 
@@ -44,7 +44,9 @@ def cart_item_count(context) -> int:
     total = Item.objects.filter(
         cart_id=cart_id,
         cart__checked_out=False,
-    ).aggregate(total=Sum("quantity"))["total"]
+    ).aggregate(
+        total=Sum("quantity")
+    )["total"]
     return total or 0
 
 
@@ -64,7 +66,9 @@ def cart_summary(context) -> str:
     total = Item.objects.filter(
         cart_id=cart_id,
         cart__checked_out=False,
-    ).aggregate(total=Sum(F("quantity") * F("unit_price")))["total"]
+    ).aggregate(
+        total=Sum(F("quantity") * F("unit_price"))
+    )["total"]
     return f"${total or Decimal('0.00'):.2f}"
 
 

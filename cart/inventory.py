@@ -9,7 +9,7 @@ Usage:
            def check(self, product, quantity: int) -> bool:
                # Check if product has enough stock
                return product.stock >= quantity
-           
+
            def reserve(self, product, quantity: int) -> bool:
                # Reserve inventory for purchase
                if product.stock >= quantity:
@@ -35,15 +35,15 @@ if TYPE_CHECKING:
 
 class InventoryChecker(ABC):
     """Base class for inventory checking.
-    
+
     Implement this class to create custom inventory validation logic for
     your e-commerce platform.
-    
+
     Example:
         class DatabaseInventoryChecker(InventoryChecker):
             def check(self, product, quantity: int) -> bool:
                 return Product.objects.get(pk=product.pk).stock >= quantity
-            
+
             def reserve(self, product, quantity: int) -> bool:
                 obj = Product.objects.get(pk=product.pk)
                 if obj.stock >= quantity:
@@ -56,14 +56,14 @@ class InventoryChecker(ABC):
     @abstractmethod
     def check(self, product: Any, quantity: int) -> bool:
         """Check if the requested quantity is available.
-        
+
         Args:
             product: The product to check.
             quantity: The quantity requested.
-            
+
         Returns:
             True if the quantity is available, False otherwise.
-            
+
         Raises:
             NotImplementedError: Subclasses must implement this method.
         """
@@ -72,17 +72,17 @@ class InventoryChecker(ABC):
     @abstractmethod
     def reserve(self, product: Any, quantity: int) -> bool:
         """Reserve inventory for a purchase.
-        
+
         This method should atomically reserve the specified quantity
         for the product. Returns True if successful, False otherwise.
-        
+
         Args:
             product: The product to reserve.
             quantity: The quantity to reserve.
-            
+
         Returns:
             True if reservation was successful, False otherwise.
-            
+
         Raises:
             NotImplementedError: Subclasses must implement this method.
         """
@@ -90,14 +90,14 @@ class InventoryChecker(ABC):
 
     def release(self, product: Any, quantity: int) -> bool:
         """Release previously reserved inventory.
-        
+
         Override this method if your inventory system supports reservation
         tracking and needs explicit release functionality.
-        
+
         Args:
             product: The product to release.
             quantity: The quantity to release.
-            
+
         Returns:
             True if release was successful, False otherwise.
         """
@@ -106,7 +106,7 @@ class InventoryChecker(ABC):
 
 class DefaultInventoryChecker(InventoryChecker):
     """Default inventory checker that always allows operations.
-    
+
     This is used when no custom checker is configured via
     CART_INVENTORY_CHECKER setting, or when inventory checking
     is disabled.
@@ -114,11 +114,11 @@ class DefaultInventoryChecker(InventoryChecker):
 
     def check(self, product: Any, quantity: int) -> bool:
         """Always return True (unlimited inventory).
-        
+
         Args:
             product: The product (unused).
             quantity: The quantity (unused).
-            
+
         Returns:
             True
         """
@@ -126,11 +126,11 @@ class DefaultInventoryChecker(InventoryChecker):
 
     def reserve(self, product: Any, quantity: int) -> bool:
         """Always return True (always successful).
-        
+
         Args:
             product: The product (unused).
             quantity: The quantity (unused).
-            
+
         Returns:
             True
         """
@@ -139,20 +139,20 @@ class DefaultInventoryChecker(InventoryChecker):
 
 def get_inventory_checker() -> InventoryChecker:
     """Get the configured inventory checker instance.
-    
+
     Returns:
         An instance of the configured InventoryChecker subclass,
         or DefaultInventoryChecker if none is configured.
     """
     from django.conf import settings
-    
-    checker_path = getattr(settings, 'CART_INVENTORY_CHECKER', None)
-    
+
+    checker_path = getattr(settings, "CART_INVENTORY_CHECKER", None)
+
     if not checker_path:
         return DefaultInventoryChecker()
-    
+
     from django.utils.module_loading import import_string
-    
+
     try:
         checker_class = import_string(checker_path)
         return checker_class()

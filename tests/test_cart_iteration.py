@@ -5,12 +5,12 @@ test_cart.py:579 — silently overridden by a second class of the same
 name at line 1277 until P-1 Phase 5 dissolved the collision. See
 docs/ROADMAP_2026_04.md §P1-5.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
 
 import pytest
-
 
 pytestmark = pytest.mark.django_db
 

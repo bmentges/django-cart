@@ -8,6 +8,7 @@ fail, the whole suite is unreliable — fix these before anything else.
 Keep this file lean: one test per fixture, happy-path only. Behavioural
 assertions about Cart, Discount, etc. live in their own test_*.py files.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal

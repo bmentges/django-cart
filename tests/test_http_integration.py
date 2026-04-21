@@ -13,6 +13,7 @@ return JSON so assertions stay terse. Template-render coverage
 (`{% load cart_tags %}` against real templates) is owned by P0-5
 and arrives with that fix.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,6 @@ import pytest
 from django.test import Client
 
 from cart.cart import CART_ID
-
 
 pytestmark = pytest.mark.django_db
 
@@ -34,6 +34,7 @@ def _json(response):
 # --------------------------------------------------------------------------- #
 # Happy paths
 # --------------------------------------------------------------------------- #
+
 
 def test_get_cart_detail_returns_empty_cart_on_first_visit(client):
     response = client.get("/cart/")
@@ -92,6 +93,7 @@ def test_post_cart_checkout_marks_cart_checked_out(client, product):
 # Session persistence (the real reason for HTTP integration tests)
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_persists_across_sequential_requests(client, product):
     client.post(f"/cart/add/{product.pk}/", {"quantity": 3})
 
@@ -135,6 +137,7 @@ def test_session_stores_cart_id_after_first_visit(client):
 # --------------------------------------------------------------------------- #
 # Error paths
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_add_for_unknown_product_returns_404(db, client):
     response = client.post("/cart/add/99999/", {"quantity": 1})

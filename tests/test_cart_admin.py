@@ -7,6 +7,7 @@ Item`` etc.) plus a handful of RequestFactory unit tests of admin
 internals. Per §P-1 delete list, those are retired; this file exercises
 the actual user-facing admin surface via the Django test client.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -14,7 +15,6 @@ from decimal import Decimal
 import pytest
 
 from cart.models import Cart as CartModel
-
 
 pytestmark = pytest.mark.django_db
 
@@ -57,7 +57,9 @@ def test_cart_admin_changelist_search_filters_by_cart_id(superuser_client):
     # Django 6.0 appends ``?_changelist_filters=…`` to change-links when
     # a filter is active, so a literal-string check wouldn't match.
     # Scan for the pk segment and compare.
-    change_pks = set(re.findall(r"/admin/cart/cart/(\d+)/change/", response.content.decode()))
+    change_pks = set(
+        re.findall(r"/admin/cart/cart/(\d+)/change/", response.content.decode())
+    )
     assert str(target.pk) in change_pks
     assert str(noise.pk) not in change_pks
 
