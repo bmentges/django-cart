@@ -54,6 +54,33 @@ _No unreleased changes._
   `CART_TAX_CALCULATOR` silently produced "tax is always 0.00"
   at runtime. The session-adapter factory is still the strict
   exception — it raises loudly, unchanged.
+- **P3** · `Item.quantity` gets a `MinValueValidator(1)` so
+  `full_clean()` rejects `quantity=0` — aligning the DB layer with
+  the `Cart.add()` / `Cart.update()` API contract. Direct
+  `Item.objects.create(..., quantity=0)` still slips through (DB
+  `CHECK` constraint deferred alongside the other Discount
+  invariants — Django 4.2/6.0 `check=`/`condition=` kwarg rename).
+- **P3** · `Cart.checked_out` and `Cart.creation_date` gain
+  `db_index=True`. The `clean_carts` management command filters on
+  both; without an index, each run fell back to a sequential scan
+  that bit at tens-of-thousands-of-rows scale.
+
+### Added
+- `Cart.get_active_user_carts(user)` classmethod — pre-filters
+  `checked_out=False`. Login-merge flows should prefer this over
+  `get_user_carts(user)` (which returns the full history including
+  past orders). The footgun of forgetting the filter — silently
+  resurrecting a past order's items into the fresh guest cart — is
+  gone by design.
+
+### Removed
+- `cart/__init__.py` no longer declares `default_app_config`. The
+  attribute was deprecated in Django 3.2 and removed in Django 6.0;
+  `cart.apps.CartConfig` is auto-discovered from `apps.py`.
+
+### Docs
+- README login-flow example uses `get_active_user_carts()`. A callout
+  distinguishes it from `get_user_carts()` (order history).
 
 ## [3.0.13] — 2026-04-21
 
