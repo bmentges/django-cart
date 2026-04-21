@@ -17,3 +17,12 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "ci"

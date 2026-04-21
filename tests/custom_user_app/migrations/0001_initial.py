@@ -8,6 +8,7 @@ the default cart.Cart model on master has a hardcoded FK to
 swapped out``. That failure mode is the whole point of this test
 suite — catching it is the TDD signal for P1-B.
 """
+
 import django.contrib.auth.models
 import django.contrib.auth.validators
 import django.utils.timezone

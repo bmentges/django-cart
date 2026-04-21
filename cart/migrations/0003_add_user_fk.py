@@ -21,9 +21,10 @@ state for anyone applying it fresh. On projects where ``AUTH_USER_MODEL
 the same target as the original hardcode, so the on-disk FK column is
 unchanged.
 """
+
+import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
-import django.db.models.deletion
 
 
 class Migration(migrations.Migration):

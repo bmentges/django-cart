@@ -8,7 +8,7 @@ Usage:
        class MyShippingCalculator(ShippingCalculator):
            def calculate(self, cart: Cart) -> Decimal:
                return Decimal("9.99")
-           
+
            def get_options(self, cart: Cart) -> list[dict]:
                return [
                    {'id': 'standard', 'name': 'Standard Shipping', 'price': '5.99'},
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 class ShippingOption(TypedDict):
     """Type definition for a shipping option."""
+
     id: str
     name: str
     price: str
@@ -41,15 +42,15 @@ class ShippingOption(TypedDict):
 
 class ShippingCalculator(ABC):
     """Base class for shipping calculators.
-    
+
     Implement this class to create custom shipping calculation logic for
     your e-commerce platform.
-    
+
     Example:
         class FlatRateShipping(ShippingCalculator):
             def calculate(self, cart: Cart) -> Decimal:
                 return Decimal("5.99")
-            
+
             def get_options(self, cart: Cart) -> list[dict]:
                 return [
                     {'id': 'standard', 'name': 'Standard', 'price': '5.99'},
@@ -59,13 +60,13 @@ class ShippingCalculator(ABC):
     @abstractmethod
     def calculate(self, cart: "Cart") -> Decimal:
         """Calculate shipping cost for the given cart.
-        
+
         Args:
             cart: The cart to calculate shipping for.
-            
+
         Returns:
             The shipping cost as a Decimal.
-            
+
         Raises:
             NotImplementedError: Subclasses must implement this method.
         """
@@ -74,16 +75,16 @@ class ShippingCalculator(ABC):
     @abstractmethod
     def get_options(self, cart: "Cart") -> list[ShippingOption]:
         """Return available shipping options for the cart.
-        
+
         Args:
             cart: The cart to get shipping options for.
-            
+
         Returns:
             A list of shipping option dictionaries, each containing:
             - id: Unique identifier for the option
             - name: Display name for the option
             - price: Price as a string (e.g., '5.99')
-            
+
         Raises:
             NotImplementedError: Subclasses must implement this method.
         """
@@ -92,17 +93,17 @@ class ShippingCalculator(ABC):
 
 class DefaultShippingCalculator(ShippingCalculator):
     """Default shipping calculator that returns zero shipping.
-    
+
     This is used when no custom calculator is configured via
     CART_SHIPPING_CALCULATOR setting.
     """
 
     def calculate(self, cart: "Cart") -> Decimal:
         """Return zero shipping cost.
-        
+
         Args:
             cart: The cart (unused in default implementation).
-            
+
         Returns:
             Decimal("0.00")
         """
@@ -110,10 +111,10 @@ class DefaultShippingCalculator(ShippingCalculator):
 
     def get_options(self, cart: "Cart") -> list[ShippingOption]:
         """Return a single free shipping option.
-        
+
         Args:
             cart: The cart (unused in default implementation).
-            
+
         Returns:
             A list containing one free shipping option.
         """
@@ -124,20 +125,20 @@ class DefaultShippingCalculator(ShippingCalculator):
 
 def get_shipping_calculator() -> ShippingCalculator:
     """Get the configured shipping calculator instance.
-    
+
     Returns:
         An instance of the configured ShippingCalculator subclass,
         or DefaultShippingCalculator if none is configured.
     """
     from django.conf import settings
-    
-    calculator_path = getattr(settings, 'CART_SHIPPING_CALCULATOR', None)
-    
+
+    calculator_path = getattr(settings, "CART_SHIPPING_CALCULATOR", None)
+
     if not calculator_path:
         return DefaultShippingCalculator()
-    
+
     from django.utils.module_loading import import_string
-    
+
     try:
         calculator_class = import_string(calculator_path)
         return calculator_class()

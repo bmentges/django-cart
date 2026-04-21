@@ -20,6 +20,7 @@ CI runs this as a separate step; the primary pytest invocation keeps
 the default ``auth.User`` setup because ``AUTH_USER_MODEL`` cannot be
 swapped mid-process.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -28,7 +29,6 @@ from django.test import RequestFactory
 
 from cart.cart import Cart
 from cart.models import Cart as CartModel
-
 
 pytestmark = pytest.mark.django_db
 

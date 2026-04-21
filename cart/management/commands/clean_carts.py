@@ -17,9 +17,10 @@ Cron job example (daily at 2 AM)
     0 2 * * * /path/to/venv/bin/python /path/to/project/manage.py clean_carts --days 30
 """
 
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from datetime import timedelta
 
 from cart.models import Cart
 
@@ -36,8 +37,7 @@ class Command(BaseCommand):
             type=int,
             default=90,
             help=(
-                "Remove carts created more than this many days ago. "
-                "Defaults to 90."
+                "Remove carts created more than this many days ago. " "Defaults to 90."
             ),
         )
         parser.add_argument(
@@ -81,7 +81,11 @@ class Command(BaseCommand):
             return
 
         if count == 0:
-            self.stdout.write(self.style.SUCCESS(f"No carts older than {days} day(s) found. Nothing to delete."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"No carts older than {days} day(s) found. Nothing to delete."
+                )
+            )
             return
 
         deleted, _ = qs.delete()

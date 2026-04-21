@@ -28,11 +28,11 @@ if TYPE_CHECKING:
 
 class TaxCalculator(ABC):
     """Base class for tax calculators.
-    
+
     Implement this class to create custom tax calculation logic for your
     e-commerce platform. The calculate method must return the tax amount
     as a Decimal.
-    
+
     Example:
         class USStateTax(TaxCalculator):
             def calculate(self, cart: Cart) -> Decimal:
@@ -44,13 +44,13 @@ class TaxCalculator(ABC):
     @abstractmethod
     def calculate(self, cart: "Cart") -> Decimal:
         """Calculate tax for the given cart.
-        
+
         Args:
             cart: The cart to calculate tax for.
-            
+
         Returns:
             The tax amount as a Decimal.
-            
+
         Raises:
             NotImplementedError: Subclasses must implement this method.
         """
@@ -59,17 +59,17 @@ class TaxCalculator(ABC):
 
 class DefaultTaxCalculator(TaxCalculator):
     """Default tax calculator that returns zero tax.
-    
+
     This is used when no custom calculator is configured via
     CART_TAX_CALCULATOR setting.
     """
 
     def calculate(self, cart: "Cart") -> Decimal:
         """Return zero tax.
-        
+
         Args:
             cart: The cart (unused in default implementation).
-            
+
         Returns:
             Decimal("0.00")
         """
@@ -78,20 +78,20 @@ class DefaultTaxCalculator(TaxCalculator):
 
 def get_tax_calculator() -> TaxCalculator:
     """Get the configured tax calculator instance.
-    
+
     Returns:
         An instance of the configured TaxCalculator subclass,
         or DefaultTaxCalculator if none is configured.
     """
     from django.conf import settings
-    
-    calculator_path = getattr(settings, 'CART_TAX_CALCULATOR', None)
-    
+
+    calculator_path = getattr(settings, "CART_TAX_CALCULATOR", None)
+
     if not calculator_path:
         return DefaultTaxCalculator()
-    
+
     from django.utils.module_loading import import_string
-    
+
     try:
         calculator_class = import_string(calculator_path)
         return calculator_class()

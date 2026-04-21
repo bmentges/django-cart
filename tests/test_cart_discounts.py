@@ -1,17 +1,15 @@
 """Cart discount methods: apply_discount, remove_discount, discount_amount, discount_code."""
+
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-
-from datetime import timedelta
-
 from django.utils import timezone
 
 from cart.cart import Cart, InvalidDiscountError
 from cart.models import Discount, DiscountType
-
 
 pytestmark = pytest.mark.django_db
 
@@ -118,6 +116,7 @@ def test_applying_discount_invalidates_cart_cache(cart_worth_200):
 # Discount.increment_usage — direct coverage of the model method
 # --------------------------------------------------------------------------- #
 
+
 def test_discount_increment_usage_increments_the_counter(discount_percent):
     """The method exists on Discount but is never called from Cart today
     (P0-2). Tested directly so the model-level behaviour is covered
@@ -156,6 +155,7 @@ def test_max_uses_enforced_across_carts(cart_worth_200, product, product_factory
     cart_worth_200.checkout()
 
     from django.test import RequestFactory
+
     request2 = RequestFactory().get("/")
     request2.session = {}
     second = Cart(request2)

@@ -4,6 +4,7 @@ Covers the five signals declared in cart.signals:
     cart_item_added, cart_item_removed, cart_item_updated,
     cart_checked_out, cart_cleared.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -50,11 +51,13 @@ def signal_sink():
         captured["removed"].append({"cart": cart, "product": product})
 
     def on_updated(sender, cart, item, **kwargs):
-        captured["updated"].append({
-            "cart": cart,
-            "item": item,
-            "deleted": kwargs.get("deleted", False),
-        })
+        captured["updated"].append(
+            {
+                "cart": cart,
+                "item": item,
+                "deleted": kwargs.get("deleted", False),
+            }
+        )
 
     def on_checked_out(sender, cart, **kwargs):
         captured["checked_out"].append({"cart": cart})
@@ -81,6 +84,7 @@ def signal_sink():
 # cart_item_added
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_item_added_fires_on_add(cart, product, signal_sink):
     item = cart.add(product, unit_price=Decimal("9.99"), quantity=2)
 
@@ -100,6 +104,7 @@ def test_cart_item_added_fires_again_on_repeat_add(cart, product, signal_sink):
 # cart_item_removed
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_item_removed_fires_on_remove(cart, product, signal_sink):
     cart.add(product, unit_price=Decimal("9.99"), quantity=2)
 
@@ -114,6 +119,7 @@ def test_cart_item_removed_fires_on_remove(cart, product, signal_sink):
 # cart_item_updated
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_item_updated_fires_on_update(cart, product, signal_sink):
     cart.add(product, unit_price=Decimal("9.99"), quantity=2)
 
@@ -124,7 +130,9 @@ def test_cart_item_updated_fires_on_update(cart, product, signal_sink):
     assert signal_sink["updated"][0]["deleted"] is False
 
 
-def test_cart_item_updated_carries_deleted_flag_on_zero_quantity(cart, product, signal_sink):
+def test_cart_item_updated_carries_deleted_flag_on_zero_quantity(
+    cart, product, signal_sink
+):
     cart.add(product, unit_price=Decimal("9.99"), quantity=2)
 
     cart.update(product, quantity=0)
@@ -137,6 +145,7 @@ def test_cart_item_updated_carries_deleted_flag_on_zero_quantity(cart, product, 
 # cart_checked_out
 # --------------------------------------------------------------------------- #
 
+
 def test_cart_checked_out_fires_on_checkout(cart, signal_sink):
     cart.checkout()
 
@@ -147,6 +156,7 @@ def test_cart_checked_out_fires_on_checkout(cart, signal_sink):
 # --------------------------------------------------------------------------- #
 # cart_cleared
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_cleared_fires_on_clear(cart, product, signal_sink):
     cart.add(product, unit_price=Decimal("9.99"), quantity=2)

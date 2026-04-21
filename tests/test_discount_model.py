@@ -1,4 +1,5 @@
 """Discount model behaviour: creation, calculation, validity, cart field wiring."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -8,8 +9,8 @@ import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 
-from cart.models import Cart as CartModel, Discount, DiscountType
-
+from cart.models import Cart as CartModel
+from cart.models import Discount, DiscountType
 
 pytestmark = pytest.mark.django_db
 
@@ -27,6 +28,7 @@ def cart_worth_200(cart, product):
 # DiscountType enum
 # --------------------------------------------------------------------------- #
 
+
 def test_discount_type_values_are_percent_and_fixed():
     assert DiscountType.PERCENT == "percent"
     assert DiscountType.FIXED == "fixed"
@@ -35,6 +37,7 @@ def test_discount_type_values_are_percent_and_fixed():
 # --------------------------------------------------------------------------- #
 # Create / unique constraint / __str__
 # --------------------------------------------------------------------------- #
+
 
 def test_create_percent_discount_defaults_to_active():
     discount = Discount.objects.create(
@@ -80,6 +83,7 @@ def test_discount_str_includes_code():
 # --------------------------------------------------------------------------- #
 # calculate_discount
 # --------------------------------------------------------------------------- #
+
 
 def test_percent_discount_calculation(cart_worth_200):
     discount = Discount.objects.create(
@@ -135,6 +139,7 @@ def test_percent_discount_amount_cannot_exceed_cart_subtotal(cart_worth_200):
 # clean() — PERCENT discounts can't exceed 100%
 # --------------------------------------------------------------------------- #
 
+
 def test_full_clean_rejects_percent_discount_value_above_100():
     """Admin forms and any caller that goes through ``full_clean``
     (Django's standard pre-save validation hook) must reject a
@@ -181,6 +186,7 @@ def test_full_clean_accepts_fixed_discount_value_above_100():
 # --------------------------------------------------------------------------- #
 # clean() — valid_from must precede valid_until when both are set
 # --------------------------------------------------------------------------- #
+
 
 def test_full_clean_rejects_valid_from_after_valid_until():
     """P2 regression: an admin could previously create a discount with
@@ -236,6 +242,7 @@ def test_full_clean_accepts_missing_validity_bounds():
 # --------------------------------------------------------------------------- #
 # is_valid_for_cart
 # --------------------------------------------------------------------------- #
+
 
 def test_discount_with_no_restrictions_is_valid(cart_worth_200):
     discount = Discount.objects.create(
@@ -337,6 +344,7 @@ def test_expired_discount_is_invalid(cart_worth_200):
 # --------------------------------------------------------------------------- #
 # Cart.discount field wiring
 # --------------------------------------------------------------------------- #
+
 
 def test_new_cart_has_no_discount():
     cart_model = CartModel.objects.create()

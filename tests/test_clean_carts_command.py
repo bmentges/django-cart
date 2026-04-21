@@ -1,4 +1,5 @@
 """clean_carts management command — delete abandoned cart records."""
+
 from __future__ import annotations
 
 import io
@@ -11,9 +12,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from cart.models import Cart as CartModel, Item
+from cart.models import Cart as CartModel
+from cart.models import Item
 from tests.test_app.models import FakeProduct
-
 
 pytestmark = pytest.mark.django_db
 
@@ -38,6 +39,7 @@ def _fresh_cart():
 # --------------------------------------------------------------------------- #
 # Success paths
 # --------------------------------------------------------------------------- #
+
 
 def test_deletes_old_abandoned_carts():
     old = _old_cart(days=100)
@@ -109,6 +111,7 @@ def test_nothing_to_delete_produces_an_informative_message():
 # Error paths
 # --------------------------------------------------------------------------- #
 
+
 @pytest.mark.parametrize("invalid_days", [0, -5])
 def test_non_positive_days_raises_command_error(invalid_days):
     with pytest.raises(CommandError):
@@ -118,6 +121,7 @@ def test_non_positive_days_raises_command_error(invalid_days):
 # --------------------------------------------------------------------------- #
 # Boundaries and cascades
 # --------------------------------------------------------------------------- #
+
 
 def test_cart_exactly_over_boundary_is_deleted():
     boundary = CartModel.objects.create(

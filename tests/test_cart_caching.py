@@ -1,4 +1,5 @@
 """In-memory cache for count() and summary(): invalidation on every mutation."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import Cart
-
 
 pytestmark = pytest.mark.django_db
 

@@ -1,4 +1,5 @@
 """Cart.add / Cart.update validate_price=True path."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import PriceMismatchError
-
 
 pytestmark = pytest.mark.django_db
 

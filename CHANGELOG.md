@@ -18,6 +18,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still the right call when you don't read `.product`. Items whose
   underlying product row was deleted are left un-prefetched so the
   existing `DoesNotExist`-on-first-access semantic is preserved.
+- CI now runs `pre-commit run --all-files` as a dedicated `Lint` job
+  on every push and PR. Contributors who skip pre-commit locally can
+  no longer land unformatted code — failures surface with the diff
+  inline in the Actions log.
+- Dependabot now covers the `pre-commit` ecosystem (weekly). Hook
+  revs stay current without manual bump PRs.
+
+### Changed
+- Pre-commit hook versions refreshed (`pre-commit-hooks` v4.5.0 →
+  v5.0.0 adds `check-yaml` / `check-toml` / `check-merge-conflict`;
+  `black` 24.1.0 → 24.10.0; `isort` 5.13.0 → 5.13.2 with
+  `--profile=black`; `flake8` 7.0.0 → 7.1.1 with `max-line-length=100`
+  and `E203`/`W503`/`E501` ignored for black-compat). `mypy` is
+  dropped from the pre-commit config — a proper typing pass needs
+  `django-stubs` and deserves its own scope.
+- One-off format pass across the codebase (trailing whitespace, EOL
+  newlines, black reflow on ~4 files, isort re-ordering on ~30 test
+  files, 5 legitimate unused imports dropped). Behaviour unchanged.
 
 ### Docs
 - README "Iteration and introspection" section adds a callout

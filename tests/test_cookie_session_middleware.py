@@ -13,16 +13,14 @@ They complement ``tests/test_session_adapters.py`` which tests the
 adapter in isolation, and ``tests/test_http_integration.py`` which
 covers the default ``DjangoSessionAdapter``.
 """
-from __future__ import annotations
 
-from decimal import Decimal
+from __future__ import annotations
 
 import pytest
 from django.test import Client
 
 from cart.cart import CART_ID
 from cart.models import Cart as CartModel
-
 
 pytestmark = pytest.mark.django_db
 
@@ -143,9 +141,7 @@ def test_middleware_is_noop_when_request_never_constructed_a_cart():
     assert CART_ID not in response.cookies
 
 
-def test_cart_after_checkout_is_replaced_by_fresh_one(
-    cookie_adapter_settings, product
-):
+def test_cart_after_checkout_is_replaced_by_fresh_one(cookie_adapter_settings, product):
     """Post-checkout, the next request's ``Cart(request)`` finds no
     ``checked_out=False`` cart for the cookie's id, so it creates a
     new one — and the middleware rotates the cookie to point at it."""

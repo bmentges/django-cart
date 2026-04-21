@@ -14,6 +14,7 @@ the tail of the list is fine::
         "cart.middleware.CartCookieMiddleware",
     ]
 """
+
 from __future__ import annotations
 
 

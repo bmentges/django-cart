@@ -1,4 +1,5 @@
 from django.contrib import admin
+
 from .models import Cart, Item
 
 
@@ -9,6 +10,7 @@ class ItemInline(admin.TabularInline):
 
     def total_price(self, obj):
         return obj.total_price
+
     total_price.short_description = "Total"
 
 
@@ -24,4 +26,5 @@ class CartAdmin(admin.ModelAdmin):
 
     def item_count(self, obj):
         return obj.items.count()
+
     item_count.short_description = "Items"

@@ -1,4 +1,5 @@
 """CART_MAX_QUANTITY_PER_ITEM setting enforcement across add / update / add_bulk."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import InvalidQuantity
-
 
 pytestmark = pytest.mark.django_db
 
@@ -52,15 +52,22 @@ def test_add_bulk_respects_max(cart, product_factory, settings):
     settings.CART_MAX_QUANTITY_PER_ITEM = 5
 
     with pytest.raises(InvalidQuantity):
-        cart.add_bulk([
-            {"product": product_factory(name="BulkMax"), "unit_price": Decimal("10.00"), "quantity": 10},
-        ])
+        cart.add_bulk(
+            [
+                {
+                    "product": product_factory(name="BulkMax"),
+                    "unit_price": Decimal("10.00"),
+                    "quantity": 10,
+                },
+            ]
+        )
 
 
 # --------------------------------------------------------------------------- #
 # Merge caps combined quantity at max (unlike add, which raises, merge
 # silently clamps — the two paths are reached by cart/cart.py:373 and 381).
 # --------------------------------------------------------------------------- #
+
 
 def test_merge_caps_combined_quantity_when_both_carts_contain_the_same_product(
     cart, other_cart, product, settings

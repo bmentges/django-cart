@@ -2,6 +2,7 @@
 AUTH_USER_MODEL support. Loaded only under tests.settings_custom_user
 (the default test suite keeps Django's built-in auth.User).
 """
+
 from django.contrib.auth.models import AbstractUser
 
 

@@ -5,6 +5,7 @@ Uses ``pytest.mark.django_db(transaction=True)`` — equivalent to
 commit or roll back against real DB state rather than savepoints of a
 wrapping test transaction.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -12,7 +13,6 @@ from decimal import Decimal
 import pytest
 
 from cart.cart import Cart, InvalidQuantity, ItemDoesNotExist
-
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -65,7 +65,9 @@ def test_add_with_invalid_quantity_leaves_cart_unchanged(rf_request, product):
     assert cart.cart.items.first().quantity == 1
 
 
-def test_update_on_unknown_product_leaves_cart_unchanged(rf_request, product, product_factory):
+def test_update_on_unknown_product_leaves_cart_unchanged(
+    rf_request, product, product_factory
+):
     cart = Cart(rf_request)
     cart.add(product, Decimal("5.00"), quantity=1)
     ghost = product_factory(name="Ghost")

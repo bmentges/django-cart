@@ -14,13 +14,13 @@ Scope:
 Both checks strip fenced code blocks first so that sample code in the
 README can't accidentally match as a link.
 """
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,10 +78,9 @@ def test_readme_relative_paths_point_at_files_that_exist(readme_text):
         if not resolved.exists():
             missing.append(target)
 
-    assert not missing, (
-        "README.md references files that don't exist:\n  "
-        + "\n  ".join(sorted(missing))
-    )
+    assert (
+        not missing
+    ), "README.md references files that don't exist:\n  " + "\n  ".join(sorted(missing))
 
 
 def test_readme_intra_doc_anchors_match_a_heading(readme_text):
@@ -95,7 +94,8 @@ def test_readme_intra_doc_anchors_match_a_heading(readme_text):
         if target[1:] not in anchors:
             missing.append(target)
 
-    assert not missing, (
-        "README.md references #anchors with no matching heading:\n  "
-        + "\n  ".join(sorted(set(missing)))
+    assert (
+        not missing
+    ), "README.md references #anchors with no matching heading:\n  " + "\n  ".join(
+        sorted(set(missing))
     )
