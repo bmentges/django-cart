@@ -1028,19 +1028,41 @@ v3.0.13 (this PR)           → P0-3 fix: CARTS_SESSION_ADAPTER_CLASS
                               now pluggable, but the cookie adapter's
                               HTTP round-trip is still broken. Both
                               land together in 3.0.14.
-v3.0.14 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
-                              each removing an @xfail marker as the
-                              fix:
-                              3.0.14 = P0-4 (CookieSessionAdapter
-                                      round-trip)
-                              3.0.15 = SKIPPED — P0-5 (README template-
-                                      tag examples) rolls into the full
-                                      README rewrite at the tail of the
-                                      sequence, not released separately.
+v3.0.14 (this PR)           → P0-4 fix: CookieSessionAdapter now
+                              round-trips cookies via real HTTP
+                              headers.
+                              Changes:
+                              - CookieSessionAdapter.__init__ seeds
+                                self._cookies from request.COOKIES when
+                                a request is passed. Previously
+                                self._cookies started empty on every
+                                request, so cart ids written to one
+                                response were lost on the next.
+                              - Phase 7 xfail test had its own bug —
+                                RequestFactory().get("/", COOKIES={...})
+                                silently drops the kwarg (only HTTP_*
+                                headers are honoured). The xfail
+                                mask was hiding it. Fixed to use
+                                HTTP_COOKIE="CART-ID=…" which is what
+                                Django actually parses.
+                              - Added a narrower init-hydration test so
+                                future regressions surface with a
+                                clearer failure mode before reaching
+                                the end-to-end round-trip test.
+                              Every P0-bug xfail is now resolved. The
+                              suite runs with zero xfails. Next
+                              releases are documentation-only
+                              (CHANGELOG backfill, stale-doc banners,
+                              README full rewrite).
+v3.0.15 = SKIPPED             — P0-5 (README template-tag examples)
+                              rolls into the full README rewrite at
+                              the tail of the sequence, not released
+                              separately.
+v3.0.16 .. v3.0.17 (patch)  → Doc-only releases:
                               3.0.16 = P0-6 (CHANGELOG backfill)
                               3.0.17 = P0-7 (docs stale-banner)
-                              (final) = README full rewrite — supersedes
-                                       P0-5.
+                              (final) = README full rewrite —
+                                       supersedes P0-5.
 v3.1.0 (minor)              → P1 block + P2-1, P2-2, P2-3, P2-9.
                               Cart.checkout() grows a validate kwarg.
                               Default is None → DeprecationWarning +
