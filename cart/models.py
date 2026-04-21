@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F
@@ -213,19 +214,51 @@ class Discount(models.Model):
 
         return True, ""
 
+    def clean(self) -> None:
+        """Validate cross-field invariants.
+
+        - A ``PERCENT`` discount cannot claim more than 100% off.
+          Django admin forms and any caller using ``full_clean()``
+          before ``save()`` rejects such rows before they reach the DB.
+          The guard is not a DB ``CheckConstraint`` because the
+          ``CheckConstraint(check=…)`` / ``CheckConstraint(condition=…)``
+          kwarg renamed between Django 5.0 and 6.0, and the project's
+          supported matrix spans both. Once 4.2 drops off the matrix,
+          a DB-level constraint can be added without compat pain.
+        """
+        super().clean()
+        if (
+            self.discount_type == DiscountType.PERCENT
+            and self.value is not None
+            and self.value > Decimal("100")
+        ):
+            raise ValidationError({
+                "value": _(
+                    "Percentage discounts cannot exceed 100% — "
+                    "value must be between 0 and 100."
+                ),
+            })
+
     def calculate_discount(self, cart: "Cart") -> Decimal:
         """Calculate the discount amount for the given cart.
-        
+
+        The returned amount is always clamped to the cart's subtotal so
+        a misconfigured ``PERCENT`` discount (``value > 100`` — possible
+        on legacy rows that pre-date the :meth:`clean` guard) can't
+        produce a discount larger than what the cart is worth.
+
         Args:
             cart: The cart to calculate discount for.
-            
+
         Returns:
-            The discount amount as a Decimal.
+            The discount amount as a Decimal, never exceeding
+            ``cart.summary()``.
         """
+        subtotal = cart.summary()
         if self.discount_type == DiscountType.PERCENT:
-            return (cart.summary() * self.value) / Decimal("100")
-        else:
-            return min(self.value, cart.summary())
+            amount = (subtotal * self.value) / Decimal("100")
+            return min(amount, subtotal)
+        return min(self.value, subtotal)
 
     def increment_usage(self) -> None:
         """Atomically increment the usage counter by one.

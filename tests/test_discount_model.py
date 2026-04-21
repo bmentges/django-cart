@@ -111,6 +111,73 @@ def test_fixed_discount_cannot_exceed_cart_subtotal(cart_worth_200):
     assert discount.calculate_discount(cart_worth_200) == Decimal("200.00")
 
 
+def test_percent_discount_amount_cannot_exceed_cart_subtotal(cart_worth_200):
+    """P2 regression: a ``PERCENT`` discount with ``value > 100`` must
+    still never return more than the cart's subtotal.
+
+    Before v3.0.14, ``calculate_discount`` computed
+    ``summary * value / 100`` with no clamp, so a (mis)configured
+    150%-off discount on a $200 cart yielded a $300 discount amount —
+    nonsense for any UI displaying "You saved $X" that doesn't also
+    call :meth:`Cart.total`. ``FIXED`` already clamped via ``min``;
+    ``PERCENT`` now matches. See docs/ANALYSIS.md §0 (P2 list).
+    """
+    discount = Discount.objects.create(
+        code="BIGPCT",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("150.00"),
+    )
+
+    assert discount.calculate_discount(cart_worth_200) == Decimal("200.00")
+
+
+# --------------------------------------------------------------------------- #
+# clean() — PERCENT discounts can't exceed 100%
+# --------------------------------------------------------------------------- #
+
+def test_full_clean_rejects_percent_discount_value_above_100():
+    """Admin forms and any caller that goes through ``full_clean``
+    (Django's standard pre-save validation hook) must reject a
+    percentage discount that claims to take more than 100% off.
+    """
+    from django.core.exceptions import ValidationError
+
+    discount = Discount(
+        code="BAD_PCT",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("150.00"),
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        discount.full_clean()
+    assert "value" in exc.value.message_dict
+    assert "100" in str(exc.value.message_dict["value"])
+
+
+def test_full_clean_accepts_percent_discount_value_exactly_100():
+    """100% off = cart is free. That's a legitimate promo and must
+    pass validation."""
+    discount = Discount(
+        code="FREE",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("100.00"),
+    )
+
+    discount.full_clean()  # must not raise
+
+
+def test_full_clean_accepts_fixed_discount_value_above_100():
+    """The PERCENT ≤ 100 guard must not leak into FIXED discounts —
+    a $500 off voucher is a perfectly normal configuration."""
+    discount = Discount(
+        code="BIG_FIXED",
+        discount_type=DiscountType.FIXED,
+        value=Decimal("500.00"),
+    )
+
+    discount.full_clean()  # must not raise
+
+
 # --------------------------------------------------------------------------- #
 # is_valid_for_cart
 # --------------------------------------------------------------------------- #
