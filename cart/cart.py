@@ -321,16 +321,22 @@ class Cart:
 
         If a discount is applied, revalidates it under a row-level lock
         and atomically increments its ``current_uses`` counter in the
-        same transaction (P0-2 — v3.0.12). If the discount became
-        invalid between :meth:`apply_discount` and this call (expired,
-        deactivated, or cap reached via a concurrent checkout),
+        same transaction. If the discount became invalid between
+        :meth:`apply_discount` and this call (expired, deactivated, or
+        cap reached via a concurrent checkout),
         :class:`InvalidDiscountError` is raised and the whole operation
         rolls back — the cart is not marked checked-out and no counter
         is bumped.
 
-        Idempotent: calling checkout on an already-checked-out cart is
-        a no-op. The counter is not incremented a second time and no
-        duplicate ``cart_checked_out`` signal fires.
+        Idempotent across facades. The ``checked_out`` flag is
+        re-checked under ``select_for_update`` on the Cart row inside
+        the transaction, so a second :class:`Cart` facade built on the
+        same DB row from a concurrent worker, double-click, or retry
+        finds the committed state and returns without re-incrementing
+        the counter or re-firing the ``cart_checked_out`` signal
+        (P1-A — v3.0.13). The cheap in-memory guard on
+        ``self.cart.checked_out`` handles the common case where the
+        same facade is called twice.
 
         :raises InvalidDiscountError: if an applied discount fails
             revalidation at checkout time.
@@ -339,17 +345,25 @@ class Cart:
             return
 
         with transaction.atomic():
-            if self.cart.discount_id is not None:
-                locked = models.Discount.objects.select_for_update().get(
-                    pk=self.cart.discount_id
+            locked_cart = models.Cart.objects.select_for_update().get(
+                pk=self.cart.pk
+            )
+            if locked_cart.checked_out:
+                self.cart.checked_out = True
+                return
+
+            if locked_cart.discount_id is not None:
+                locked_discount = models.Discount.objects.select_for_update().get(
+                    pk=locked_cart.discount_id
                 )
-                is_valid, message = locked.is_valid_for_cart(self)
+                is_valid, message = locked_discount.is_valid_for_cart(self)
                 if not is_valid:
                     raise InvalidDiscountError(message)
-                locked.increment_usage()
+                locked_discount.increment_usage()
 
+            locked_cart.checked_out = True
+            locked_cart.save(update_fields=["checked_out"])
             self.cart.checked_out = True
-            self.cart.save(update_fields=["checked_out"])
 
         if cart_checked_out is not None:
             cart_checked_out.send(sender=self.__class__, cart=self.cart)

@@ -195,3 +195,59 @@ def test_checkout_is_idempotent_does_not_double_increment(
 
     discount_percent.refresh_from_db()
     assert discount_percent.current_uses == 1
+
+
+def test_second_facade_checkout_does_not_double_increment_counter(
+    cart_worth_200, discount_percent, rf_request
+):
+    """P1-A regression: the single-facade idempotency check above
+    only works because ``self.cart.checked_out`` is already True on
+    the second call. A second ``Cart(request)`` facade on the same
+    row — a second worker, a retry after a network blip, a
+    double-clicked submit button — starts with a stale in-memory
+    ``checked_out=False`` cache and re-enters the mutation path.
+
+    Before the fix, that re-entry locked the Discount row, revalidated
+    (max_uses=None lets it through), and called ``increment_usage()``
+    a second time. The counter drifted to 2. The ``cart_checked_out``
+    signal also fired twice — any listener treating that as 'a new
+    order landed' would double-count.
+    """
+    cart_worth_200.apply_discount("PERCENT20")
+
+    twin = Cart(rf_request)
+    assert twin.cart.pk == cart_worth_200.cart.pk
+
+    cart_worth_200.checkout()
+    twin.checkout()
+
+    discount_percent.refresh_from_db()
+    assert discount_percent.current_uses == 1
+
+
+def test_second_facade_checkout_does_not_fire_second_checked_out_signal(
+    cart_worth_200, discount_percent, rf_request
+):
+    """Sister assertion to the counter test above: the
+    ``cart_checked_out`` signal must fire exactly once per cart, even
+    when a second facade with a stale view tries to check out again."""
+    from cart.signals import cart_checked_out
+
+    cart_worth_200.apply_discount("PERCENT20")
+
+    twin = Cart(rf_request)
+    assert twin.cart.pk == cart_worth_200.cart.pk
+
+    received = []
+
+    def receiver(sender, cart, **kwargs):
+        received.append(cart.pk)
+
+    cart_checked_out.connect(receiver, sender=Cart)
+    try:
+        cart_worth_200.checkout()
+        twin.checkout()
+    finally:
+        cart_checked_out.disconnect(receiver, sender=Cart)
+
+    assert received == [cart_worth_200.cart.pk]
