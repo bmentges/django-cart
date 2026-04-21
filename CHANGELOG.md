@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Changed
+- `Cart.tax()`, `Cart.shipping()`, `Cart.discount_amount()`, and
+  `Cart.total()` now cache their results on the `Cart` instance
+  (ANALYSIS §8.2). `_invalidate_cache()` — already called from every
+  mutation — resets them alongside `summary()` and `count()`. A
+  template that renders subtotal + tax + shipping + total + discount
+  alongside each other used to invoke each configured calculator up
+  to 4× per render (once for the standalone field, once inside
+  `total()`); it now invokes each exactly once per `Cart` instance.
+  Tax and shipping calculators in the wild frequently hit external
+  APIs (Stripe Tax, Avalara, TaxJar), so this translates directly to
+  fewer round-trips per request.
 
 ## [3.1.0] — 2026-04-21
 
