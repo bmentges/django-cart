@@ -182,20 +182,6 @@ def test_cookie_adapter_delete_on_missing_key_is_noop():
     assert "never-set" not in adapter._cookies
 
 
-# --------------------------------------------------------------------------- #
-# P0 regression — @xfail until the fix lands
-# --------------------------------------------------------------------------- #
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "P0-4 — CookieSessionAdapter.__init__ never populates self._cookies "
-        "from request.COOKIES, so a cart id set on one request is not "
-        "recoverable on the next. The in-memory round-trip works (previous "
-        "tests); the HTTP round-trip does not. Scheduled for v3.0.14 "
-        "(see docs/ROADMAP_2026_04.md §P0-4)."
-    ),
-)
 def test_cookie_session_adapter_round_trips_via_real_request_cookies():
     """Two sequential requests sharing a cookie jar should see the same
     cart id — the canonical cookie-session-adapter contract."""
