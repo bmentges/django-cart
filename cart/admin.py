@@ -8,10 +8,9 @@ class ItemInline(admin.TabularInline):
     extra = 0
     readonly_fields = ("content_type", "object_id", "unit_price", "quantity")
 
-    def total_price(self, obj):
+    @admin.display(description="Total")
+    def total_price(self, obj: Item) -> object:
         return obj.total_price
-
-    total_price.short_description = "Total"
 
 
 @admin.register(Cart)
@@ -24,7 +23,6 @@ class CartAdmin(admin.ModelAdmin):
     search_fields = ("=id",)
     inlines = [ItemInline]
 
-    def item_count(self, obj):
+    @admin.display(description="Items")
+    def item_count(self, obj: Cart) -> int:
         return obj.items.count()
-
-    item_count.short_description = "Items"
