@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`pytest --ds=tests.settings_custom_user tests/test_cart_custom_user.py`)
   to prove the library installs and operates on projects with a
   custom user model.
+- `CART_DETAIL_URL_NAME` setting — URL name used by `{% cart_link %}`
+  to resolve the anchor via `reverse()`. Optional; defaults to
+  `/cart/` when unset.
 
 ### Fixed
 - **P1-A** · `Cart.checkout()` is now idempotent across facades. Before
@@ -38,11 +41,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unapplicable under a swapped user model). Projects on the default
   `auth.User` are unaffected; the swappable reference resolves to the
   same target.
+- **P1-C** · Template tags no longer create Cart rows as a side
+  effect of rendering. `cart_item_count`, `cart_summary`, and
+  `cart_is_empty` read directly from the DB using the session's
+  existing `CART-ID` and return defaults when no cart id is bound;
+  `cart_link` never touches the cart at all. Before this release, any
+  site using these tags in a header created one abandoned row per
+  bot, crawler, healthcheck, and anonymous pageview.
+- **P1-C** · `cart_link` no longer embeds the cart's integer primary
+  key in the URL (the old `/cart/{id}/` shape leaked sequential DB
+  ids to referrers, analytics, and third-party scripts). The tag
+  resolves the target via `reverse(CART_DETAIL_URL_NAME)` when the
+  new setting is configured, falling back to a static `/cart/`
+  otherwise or on `NoReverseMatch`.
 
 ### Docs
 - README `Checkout` section, the concurrency warning in
   `Using the Cart`, and the discount-enforcement sequence diagram now
   reflect the P1-A fix (Cart row is locked, not just the Discount row).
+- README Template Tags section adds a callout that the tags are
+  row-side-effect-free plus a `CART_DETAIL_URL_NAME` example, and the
+  Settings Reference table lists the new setting.
 - Removed two dead links to the unwritten `docs/ROADMAP_2026_04.md`;
   both references now point at `docs/ANALYSIS.md`.
 

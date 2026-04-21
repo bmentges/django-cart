@@ -171,3 +171,97 @@ def test_cart_link_renders_through_template_engine(db, rf_request):
 
     assert 'class="btn btn-primary"' in result
     assert '>My Cart</a>' in result
+
+
+# --------------------------------------------------------------------------- #
+# P1-C: template tags must NOT create Cart rows on pure-read renders.
+#
+# Before this fix every tag called ``Cart(request)`` unconditionally, which
+# materialises a DB row if the session has no CART-ID. Sites that load any
+# of these tags in a site-wide header created one abandoned cart per bot /
+# crawler / healthcheck pageview — the clean_carts cron became a firehose
+# and downstream projects had no ergonomic way to opt out.
+# See docs/ANALYSIS.md §4.4.
+# --------------------------------------------------------------------------- #
+
+from cart.models import Cart as CartModel  # noqa: E402
+
+
+def test_cart_item_count_on_fresh_session_creates_no_cart_row(db, rf_request):
+    assert CartModel.objects.count() == 0
+
+    result = cart_item_count(Context({"request": rf_request}))
+
+    assert result == 0
+    assert CartModel.objects.count() == 0
+
+
+def test_cart_summary_on_fresh_session_creates_no_cart_row(db, rf_request):
+    assert CartModel.objects.count() == 0
+
+    result = cart_summary(Context({"request": rf_request}))
+
+    assert result == "$0.00"
+    assert CartModel.objects.count() == 0
+
+
+def test_cart_is_empty_on_fresh_session_creates_no_cart_row(db, rf_request):
+    assert CartModel.objects.count() == 0
+
+    result = cart_is_empty(Context({"request": rf_request}))
+
+    assert result is True
+    assert CartModel.objects.count() == 0
+
+
+def test_cart_link_on_fresh_session_creates_no_cart_row(db, rf_request):
+    assert CartModel.objects.count() == 0
+
+    cart_link(Context({"request": rf_request}))
+
+    assert CartModel.objects.count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# P1-C: cart_link URL hygiene
+# --------------------------------------------------------------------------- #
+
+def test_cart_link_does_not_expose_cart_id_in_url(cart, product, context_with_request):
+    """Sequential integer cart ids must not leak into the rendered URL.
+    The pre-fix ``/cart/{id}/`` shape exposed those ids to referrers,
+    analytics, and third-party scripts — a minor information disclosure
+    and a broken URL on any project that doesn't define the route.
+    """
+    cart.add(product, Decimal("10.00"))
+
+    result = cart_link(context_with_request)
+
+    assert f"/cart/{cart.cart.pk}/" not in result
+
+
+def test_cart_link_uses_reverse_when_CART_DETAIL_URL_NAME_is_set(
+    cart, context_with_request, settings
+):
+    """With ``CART_DETAIL_URL_NAME`` configured, the tag must resolve
+    the URL via ``reverse()`` instead of hardcoding ``/cart/``. The
+    test URL conf defines ``path("cart/", ..., name="cart_detail")``
+    so reversed output is ``/cart/`` — we assert the tag returned
+    exactly that, with no cart id suffix."""
+    settings.CART_DETAIL_URL_NAME = "cart_detail"
+
+    result = cart_link(context_with_request)
+
+    assert 'href="/cart/"' in result
+
+
+def test_cart_link_falls_back_to_slash_cart_when_reverse_raises(
+    cart, context_with_request, settings
+):
+    """A misconfigured URL name (name doesn't resolve) must degrade to
+    the static ``/cart/`` default rather than raising and breaking the
+    surrounding template render."""
+    settings.CART_DETAIL_URL_NAME = "not_a_real_url"
+
+    result = cart_link(context_with_request)
+
+    assert 'href="/cart/"' in result
