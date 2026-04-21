@@ -942,9 +942,33 @@ v3.0.10 (this PR)           → P-1 Phase 8: runner unification.
                               behaviour change lands as "failing test
                               first, then the fix" on the pytest
                               foundation built over v3.0.3–v3.0.10.
-v3.0.11 .. v3.0.17 (patch)  → P0 bug fixes, one per release, each
-                              removing an @xfail marker as the fix:
-                              3.0.11 = P0-1 (from_serializable)
+v3.0.11 (this PR)           → P0-1 fix: Cart.from_serializable
+                              actually restores items into a fresh
+                              cart. Option 2 of the original fix menu
+                              was chosen (Option 1 — rename — was
+                              ruled out by the Phase 7 xfail test that
+                              asserts items exist post-restore). Net
+                              change:
+                              - cart_serializable() output gains a
+                                new `content_type_id` field so the
+                                payload is self-describing.
+                              - from_serializable() creates items when
+                                they are not present in the target
+                                cart (requires content_type_id); still
+                                updates pre-existing items when only
+                                quantity / unit_price change.
+                              - Legacy (pre-v3.0.11) payloads without
+                                content_type_id raise a clear
+                                ValueError instead of silently no-
+                                op'ing on a fresh cart.
+                              Backwards-compatible additive change —
+                              old payloads still work for updating
+                              existing items; they just fail loudly
+                              rather than silently when asked to
+                              restore into an empty cart.
+v3.0.12 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
+                              each removing an @xfail marker as the
+                              fix:
                               3.0.12 = P0-2 (discount current_uses —
                                       gated, see note below)
                               3.0.13 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
