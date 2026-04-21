@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [3.0.14] — 2026-04-21
+
 ### Fixed
 - **P2** · `DiscountType.PERCENT` no longer lets `value` exceed 100.
   `Discount.clean()` now raises `ValidationError` on percentage
