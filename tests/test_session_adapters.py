@@ -182,20 +182,25 @@ def test_cookie_adapter_delete_on_missing_key_is_noop():
     assert "never-set" not in adapter._cookies
 
 
-# --------------------------------------------------------------------------- #
-# P0 regression — @xfail until the fix lands
-# --------------------------------------------------------------------------- #
+def test_cookie_init_hydrates_cookies_dict_from_request_COOKIES():
+    """Focused regression test for P0-4. If __init__ ever stops copying
+    request.COOKIES into self._cookies, the HTTP round-trip breaks —
+    this test catches that before it reaches the end-to-end round-trip
+    test below and gives a clearer failure mode.
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "P0-4 — CookieSessionAdapter.__init__ never populates self._cookies "
-        "from request.COOKIES, so a cart id set on one request is not "
-        "recoverable on the next. The in-memory round-trip works (previous "
-        "tests); the HTTP round-trip does not. Scheduled for v3.0.14 "
-        "(see docs/ROADMAP_2026_04.md §P0-4)."
-    ),
-)
+    Uses ``HTTP_COOKIE`` because ``RequestFactory`` does not accept a
+    ``COOKIES=`` kwarg — it silently drops it. The header form is what
+    Django actually parses in production.
+    """
+    from django.test import RequestFactory
+
+    request = RequestFactory().get("/", HTTP_COOKIE="CART-ID=7; other=keep")
+    adapter = CookieSessionAdapter(request=request)
+
+    assert adapter._cookies["CART-ID"] == "7"
+    assert adapter._cookies["other"] == "keep"
+
+
 def test_cookie_session_adapter_round_trips_via_real_request_cookies():
     """Two sequential requests sharing a cookie jar should see the same
     cart id — the canonical cookie-session-adapter contract."""
@@ -209,9 +214,10 @@ def test_cookie_session_adapter_round_trips_via_real_request_cookies():
 
     cart_id_cookie = response.cookies["CART-ID"].value
 
-    # Request 2: browser echoes the cookie back; Django populates
-    # request.COOKIES from it. The adapter must hydrate from that.
-    request = RequestFactory().get("/", COOKIES={"CART-ID": cart_id_cookie})
+    # Request 2: browser echoes the cookie back via the Cookie header;
+    # Django populates request.COOKIES from it. The adapter must
+    # hydrate from that.
+    request = RequestFactory().get("/", HTTP_COOKIE=f"CART-ID={cart_id_cookie}")
     reader = CookieSessionAdapter(request=request)
 
     assert reader.get_or_create_cart_id() == 42

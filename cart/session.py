@@ -77,7 +77,7 @@ class CookieSessionAdapter(CartSessionAdapter):
     def __init__(self, request=None, response=None):
         self._request = request
         self._response = response
-        self._cookies = {}
+        self._cookies = dict(request.COOKIES) if request is not None else {}
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._cookies.get(key, default)
