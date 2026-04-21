@@ -695,26 +695,36 @@ def clean_old_carts():
 
 ## Testing
 
+Install the dev extras (includes pytest + pytest-django + coverage):
+
+```bash
+pip install -e ".[dev]"
+```
+
 ### Run All Tests
 
 ```bash
-python runtests.py
+pytest
 ```
 
 ### Run Specific Tests
 
 ```bash
-python runtests.py tests.test_cart.CartAddTest
+pytest tests/test_cart_add.py
+pytest tests/test_cart_add.py::test_add_new_product_stores_the_quantity
 ```
 
 ### Test Coverage
 
 ```bash
-pip install coverage
-coverage run runtests.py
+coverage run -m pytest
 coverage report
 coverage html  # HTML report in htmlcov/
 ```
+
+The coverage config sets an advisory floor of 90% (`fail_under = 90`
+in `pyproject.toml`) — `coverage report` exits non-zero below that
+threshold as a local warning. CI does not enforce a coverage gate.
 
 ### What Gets Tested
 
