@@ -57,6 +57,51 @@ class MinimumOrderNotMet(CartException):
     """Raised when cart doesn't meet minimum order amount."""
 
 
+def _parse_serializable_key(key: str, item_data: dict) -> tuple[int, int]:
+    """Resolve a ``cart_serializable`` payload entry to ``(content_type_id, object_id)``.
+
+    Accepts two key shapes:
+
+    - **Composite** (v3.0.13+): ``"<content_type_id>:<object_id>"``. The
+      ``content_type_id`` in the value (if present) must match the key.
+    - **Legacy** (pre-v3.0.13): ``"<object_id>"``. The ``content_type_id``
+      must then be provided inside the value.
+
+    :raises ValueError: if the key can't be parsed or neither the key nor
+        the value yields a ``content_type_id`` — the legacy payload shape
+        introduced before P0-1 (v3.0.11) omitted ``content_type_id``
+        entirely and has no deterministic restore path.
+    """
+    if ":" in key:
+        ct_str, obj_str = key.split(":", 1)
+        try:
+            content_type_id = int(ct_str)
+            object_id = int(obj_str)
+        except ValueError as exc:
+            raise ValueError(
+                f"Cannot restore item key={key!r}: expected "
+                "'<content_type_id>:<object_id>' with integer parts."
+            ) from exc
+        return content_type_id, object_id
+
+    try:
+        object_id = int(key)
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot restore item key={key!r}: expected "
+            "'<content_type_id>:<object_id>' or an integer object_id."
+        ) from exc
+
+    content_type_id = item_data.get("content_type_id")
+    if content_type_id is None:
+        raise ValueError(
+            f"Cannot restore item key={key!r}: payload is missing "
+            "'content_type_id'. Pre-v3.0.11 serialised payloads lack "
+            "this field and cannot be restored without it."
+        )
+    return int(content_type_id), object_id
+
+
 class Cart:
     """
     Session-backed shopping cart.
@@ -379,28 +424,31 @@ class Cart:
         Example output::
 
             {
-                "42": {
+                "7:42": {
                     "content_type_id": 7,
-                    "total_price": "19.98",
-                    "unit_price": "9.99",
+                    "object_id": 42,
                     "quantity": 2,
+                    "unit_price": "9.99",
+                    "total_price": "19.98",
                 },
                 ...
             }
 
-        The ``content_type_id`` field was added in v3.0.11 (P0-1 fix —
-        see docs/ROADMAP_2026_04.md §P0-1). It lets
-        :meth:`from_serializable` create items in a fresh cart rather
-        than silently no-op'ing. Pre-v3.0.11 payloads (without this
-        field) can still update items already present in the target
-        cart; they cannot restore into an empty one.
+        Keys are ``"<content_type_id>:<object_id>"`` composites (P1-D
+        fix, v3.0.13). The pre-v3.0.13 format used the bare
+        ``str(object_id)`` as the key, which silently collapsed items
+        with the same PK across different product models.
+        :meth:`from_serializable` accepts both formats — legacy
+        consumers that stored payloads before v3.0.13 keep working as
+        long as each value carries ``content_type_id``.
         """
         return {
-            str(item.object_id): {
+            f"{item.content_type_id}:{item.object_id}": {
                 "content_type_id": item.content_type_id,
-                "total_price": str(item.total_price),
-                "unit_price": str(item.unit_price),
+                "object_id": item.object_id,
                 "quantity": item.quantity,
+                "unit_price": str(item.unit_price),
+                "total_price": str(item.total_price),
             }
             for item in self.cart.items.all()
         }
@@ -410,18 +458,23 @@ class Cart:
         """
         Restore a cart from serializable data.
 
-        Creates any items whose ``object_id`` isn't already present in
-        the target cart, provided the payload supplies
-        ``content_type_id`` alongside them. Items that already exist are
-        updated in place from ``quantity`` / ``unit_price`` if given.
+        Looks each entry up by ``(content_type_id, object_id)`` — the
+        composite identity that actually distinguishes one cart item
+        from another (P1-D fix, v3.0.13). Existing items are updated
+        in place; missing items are created from the payload.
+
+        Keys may be either the new ``"<content_type_id>:<object_id>"``
+        composite format or the legacy plain ``str(object_id)`` form.
+        In the legacy case, ``content_type_id`` must be supplied in the
+        value.
 
         :param request: Django request object.
         :param data: Dict as produced by :meth:`cart_serializable`.
         :returns: A :class:`Cart` instance with the restored items.
-        :raises ValueError: if the payload is missing ``content_type_id``
-            for an item that isn't already present in the target cart.
-            Pre-v3.0.11 payloads lack this field and can only update
-            pre-existing items.
+        :raises ValueError: if a payload entry cannot be resolved to a
+            ``(content_type_id, object_id)`` pair — either the key is
+            malformed or the legacy-format value is missing
+            ``content_type_id``.
 
         Example::
 
@@ -431,9 +484,12 @@ class Cart:
         """
         cart = cls(request)
         with transaction.atomic():
-            for object_id, item_data in data.items():
+            for key, item_data in data.items():
+                content_type_id, object_id = _parse_serializable_key(key, item_data)
+
                 item = models.Item.objects.filter(
                     cart=cart.cart,
+                    content_type_id=content_type_id,
                     object_id=object_id,
                 ).first()
                 if item is not None:
@@ -443,19 +499,10 @@ class Cart:
                     item.save()
                     continue
 
-                content_type_id = item_data.get("content_type_id")
-                if content_type_id is None:
-                    raise ValueError(
-                        f"Cannot restore item object_id={object_id!r}: "
-                        "payload is missing 'content_type_id'. Pre-v3.0.11 "
-                        "serialised payloads lack this field and can only "
-                        "update items already present in the cart."
-                    )
-
                 models.Item.objects.create(
                     cart=cart.cart,
                     content_type_id=content_type_id,
-                    object_id=int(object_id),
+                    object_id=object_id,
                     quantity=item_data.get("quantity", 1),
                     unit_price=Decimal(item_data.get("unit_price", "0.00")),
                 )
