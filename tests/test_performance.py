@@ -84,3 +84,58 @@ def test_iteration_is_query_bounded_independent_of_item_count(
         items = list(cart)
 
     assert len(items) == 50
+
+
+def test_items_with_products_accessing_product_is_query_free(
+    cart, product_factory, django_assert_max_num_queries
+):
+    """``items_with_products()`` must prefetch every item's product
+    row so subsequent ``.product`` access is a pure in-memory read.
+
+    Shape: 1 SELECT on Item (select_related content_type) + 1 SELECT
+    per distinct content type. 50 items all from the ``FakeProduct``
+    model = 1 content type = 2 queries total. The upper bound of 2
+    catches any regression that falls back to the per-item
+    ``.content_type.model_class().objects.get(pk=...)`` path (which
+    would be 50 extra queries).
+    """
+    for i in range(50):
+        cart.add(product_factory(name=f"BatchIter{i}"), Decimal("10.00"))
+
+    cart._invalidate_cache()
+
+    with django_assert_max_num_queries(2):
+        items = cart.items_with_products()
+        for item in items:
+            _ = item.product  # must be cache hit
+
+    assert len(items) == 50
+
+
+def test_items_with_products_batches_per_content_type(
+    cart, django_assert_max_num_queries
+):
+    """Items from multiple product models should require exactly one
+    product-table query per distinct content type, not one per item."""
+    from tests.test_app.models import FakeProduct, FakeProductNoPrice
+
+    for i in range(5):
+        cart.add(
+            FakeProduct.objects.create(name=f"A{i}", price=Decimal("1.00")),
+            Decimal("1.00"),
+        )
+    for i in range(5):
+        cart.add(
+            FakeProductNoPrice.objects.create(name=f"B{i}"),
+            Decimal("2.00"),
+        )
+
+    cart._invalidate_cache()
+
+    # 1 SELECT Item (with content_type) + 2 SELECT product tables = 3.
+    with django_assert_max_num_queries(3):
+        items = cart.items_with_products()
+        for item in items:
+            _ = item.product
+
+    assert len(items) == 10
