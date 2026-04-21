@@ -2,7 +2,7 @@
 Shared pytest fixtures for the django-cart test suite.
 
 This module is the single source of test helpers. Per the P-1 test overhaul
-(docs/ROADMAP_2026_04.md), test files MUST NOT define their own helper
+(see docs/ANALYSIS.md), test files MUST NOT define their own helper
 functions — declare a fixture here instead, or extend an existing one.
 
 See tests/README.md for the canonical test pattern, the rationale, and the
@@ -10,6 +10,7 @@ full catalogue.
 """
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 
 import pytest
@@ -18,6 +19,28 @@ from django.test import RequestFactory
 from cart.cart import Cart
 from cart.models import Discount, DiscountType
 from tests.test_app.models import FakeProduct, FakeProductNoPrice
+
+
+# --------------------------------------------------------------------------- #
+# Custom-AUTH_USER_MODEL test gating
+# --------------------------------------------------------------------------- #
+# test_cart_custom_user.py requires AUTH_USER_MODEL to be swapped to
+# tests.custom_user_app.CustomUser — a setup that cannot coexist with the
+# default suite in a single process (Django's app registry is frozen after
+# init). It runs under a dedicated settings module invoked via
+# ``pytest --ds=tests.settings_custom_user tests/test_cart_custom_user.py``.
+# This hook keeps the default ``pytest`` invocation from collecting the
+# file and tripping over the sanity assertion about the active user model.
+
+def pytest_ignore_collect(collection_path, config):
+    if collection_path.name == "test_cart_custom_user.py":
+        ds = (
+            os.environ.get("DJANGO_SETTINGS_MODULE")
+            or config.getini("DJANGO_SETTINGS_MODULE")
+            or ""
+        )
+        return ds != "tests.settings_custom_user"
+    return False
 
 
 # --------------------------------------------------------------------------- #
