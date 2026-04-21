@@ -793,6 +793,27 @@ OPTIONS → context_processors`).
 All four tags declare `takes_context=True` and read `request` from
 the template context. Do not pass `request` positionally.
 
+> [!note] Tags do not create abandoned cart rows
+> The three read-only tags (`cart_item_count`, `cart_summary`,
+> `cart_is_empty`) query the cart directly from the DB when the
+> session already carries a `CART-ID`, and return defaults otherwise.
+> `cart_link` never queries the cart at all. Loading any of these in
+> a site-wide header is safe to serve to crawlers, bots, and
+> pre-login visitors — none of them will materialise a DB row.
+
+> [!tip] Route `cart_link` through your own URL conf
+> Set `CART_DETAIL_URL_NAME` to a URL name you've defined, and
+> `cart_link` will resolve the anchor via `reverse()`:
+>
+> ```python
+> # settings.py
+> CART_DETAIL_URL_NAME = "cart_detail"
+> ```
+>
+> With the setting absent — or the URL name unresolvable — the tag
+> falls back to a static `/cart/`. The cart's integer primary key is
+> never embedded in the URL.
+
 Example header snippet:
 
 ```django
@@ -832,6 +853,7 @@ or `None`.
 | `CARTS_SESSION_ADAPTER_CLASS` | dotted path or class | `DjangoSessionAdapter` | Where the integer cart id is stored. See [Session Storage](#session-storage). |
 | `CART_MAX_QUANTITY_PER_ITEM` | int or `None` | `None` (unlimited) | Cap on `item.quantity`. Exceeding raises `InvalidQuantity`. |
 | `CART_MIN_ORDER_AMOUNT` | `Decimal` or `None` | `None` (no minimum) | Minimum `cart.summary()` required for `can_checkout()` to return `True`. |
+| `CART_DETAIL_URL_NAME` | str or `None` | `None` | URL name passed to `reverse()` by the `{% cart_link %}` template tag. Falls back to a static `/cart/` when unset or unresolvable. See [Template Tags](#template-tags). |
 
 ---
 
