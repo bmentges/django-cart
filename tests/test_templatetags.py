@@ -1,142 +1,123 @@
+"""Template tags declared in cart.templatetags.cart_tags.
+
+Covers the four tags: cart_item_count, cart_summary, cart_is_empty,
+cart_link.
+
+NOTE: these tests invoke the tag callables directly rather than rendering
+real templates via ``Template(...).render(...)``. The direct-call path
+exercises the function body but skips template-engine concerns (``{% load
+%}`` resolution, ``takes_context=True`` wiring, parse-time argument
+handling). End-to-end template-render coverage is owned by P0-5 (README
+template-tag examples wrong) and will be added in v3.0.16 alongside the
+README fix — see docs/ROADMAP_2026_04.md.
 """
-Tests for template tags.
-"""
+from __future__ import annotations
 
 from decimal import Decimal
 
-from django.test import TestCase, RequestFactory
+import pytest
 from django.template import Context
 
-from cart.cart import Cart
 from cart.templatetags.cart_tags import (
-    cart_item_count,
-    cart_summary,
     cart_is_empty,
+    cart_item_count,
     cart_link,
+    cart_summary,
 )
-from tests.test_app.models import FakeProduct
 
 
-class TemplateTagTestMixin:
-    """Mixin providing common setup for template tag tests."""
-
-    def setUp(self):
-        self.factory = RequestFactory()
-        self.request = self.factory.get("/")
-        self.request.session = {}
-
-    def make_context(self, **extra):
-        """Create a template context with request."""
-        context = {"request": self.request}
-        context.update(extra)
-        return Context(context)
+@pytest.fixture
+def context_with_request(rf_request):
+    """Template context with ``rf_request`` attached — what ``takes_context=True`` sees."""
+    return Context({"request": rf_request})
 
 
-class CartItemCountTagTest(TemplateTagTestMixin, TestCase):
-    """Tests for cart_item_count template tag."""
-
-    def test_returns_zero_for_empty_cart(self):
-        """Returns 0 for empty cart."""
-        context = self.make_context()
-        result = cart_item_count(context)
-        self.assertEqual(result, 0)
-
-    def test_returns_correct_count(self):
-        """Returns correct item count."""
-        product = FakeProduct.objects.create(name="Test Product", price=Decimal("9.99"))
-
-        cart = Cart(self.request)
-        cart.add(product, unit_price=Decimal("9.99"), quantity=3)
-
-        context = self.make_context()
-        result = cart_item_count(context)
-        self.assertEqual(result, 3)
-
-    def test_returns_zero_without_request(self):
-        """Returns 0 when request not in context."""
-        context = Context({})
-        result = cart_item_count(context)
-        self.assertEqual(result, 0)
+@pytest.fixture
+def context_without_request():
+    """Template context with no request — simulates tag use outside a request cycle."""
+    return Context({})
 
 
-class CartSummaryTagTest(TemplateTagTestMixin, TestCase):
-    """Tests for cart_summary template tag."""
+# --------------------------------------------------------------------------- #
+# cart_item_count
+# --------------------------------------------------------------------------- #
 
-    def test_returns_zero_for_empty_cart(self):
-        """Returns $0.00 for empty cart."""
-        context = self.make_context()
-        result = cart_summary(context)
-        self.assertEqual(result, "$0.00")
-
-    def test_returns_formatted_total(self):
-        """Returns formatted cart total."""
-        product = FakeProduct.objects.create(name="Test Product", price=Decimal("9.99"))
-
-        cart = Cart(self.request)
-        cart.add(product, unit_price=Decimal("9.99"), quantity=2)
-
-        context = self.make_context()
-        result = cart_summary(context)
-        self.assertEqual(result, "$19.98")
-
-    def test_returns_zero_without_request(self):
-        """Returns $0.00 when request not in context."""
-        context = Context({})
-        result = cart_summary(context)
-        self.assertEqual(result, "$0.00")
+def test_cart_item_count_returns_zero_for_empty_cart(db, context_with_request):
+    assert cart_item_count(context_with_request) == 0
 
 
-class CartIsEmptyTagTest(TemplateTagTestMixin, TestCase):
-    """Tests for cart_is_empty template tag."""
+def test_cart_item_count_returns_actual_count(cart, product, context_with_request):
+    cart.add(product, unit_price=Decimal("9.99"), quantity=3)
 
-    def test_returns_true_for_empty_cart(self):
-        """Returns True for empty cart."""
-        context = self.make_context()
-        result = cart_is_empty(context)
-        self.assertTrue(result)
-
-    def test_returns_false_for_nonempty_cart(self):
-        """Returns False for non-empty cart."""
-        product = FakeProduct.objects.create(name="Test Product", price=Decimal("9.99"))
-
-        cart = Cart(self.request)
-        cart.add(product, unit_price=Decimal("9.99"), quantity=1)
-
-        context = self.make_context()
-        result = cart_is_empty(context)
-        self.assertFalse(result)
-
-    def test_returns_true_without_request(self):
-        """Returns True when request not in context."""
-        context = Context({})
-        result = cart_is_empty(context)
-        self.assertTrue(result)
+    assert cart_item_count(context_with_request) == 3
 
 
-class CartLinkTagTest(TemplateTagTestMixin, TestCase):
-    """Tests for cart_link template tag."""
+def test_cart_item_count_returns_zero_when_context_has_no_request(context_without_request):
+    assert cart_item_count(context_without_request) == 0
 
-    def test_returns_basic_link(self):
-        """Returns basic link without class."""
-        context = self.make_context()
-        result = cart_link(context)
-        self.assertIn('<a href="/cart/', result)
-        self.assertIn(">View Cart</a>", result)
 
-    def test_returns_link_with_custom_text(self):
-        """Returns link with custom text."""
-        context = self.make_context()
-        result = cart_link(context, text="Go to Cart")
-        self.assertIn(">Go to Cart</a>", result)
+# --------------------------------------------------------------------------- #
+# cart_summary
+# --------------------------------------------------------------------------- #
 
-    def test_returns_link_with_css_class(self):
-        """Returns link with CSS class."""
-        context = self.make_context()
-        result = cart_link(context, text="Cart", css_class="btn btn-primary")
-        self.assertIn('class="btn btn-primary"', result)
+def test_cart_summary_returns_zero_dollars_for_empty_cart(db, context_with_request):
+    assert cart_summary(context_with_request) == "$0.00"
 
-    def test_returns_link_without_request(self):
-        """Returns link to /cart/ when no request."""
-        context = Context({})
-        result = cart_link(context)
-        self.assertIn('<a href="/cart/">View Cart</a>', result)
+
+def test_cart_summary_returns_formatted_total(cart, product, context_with_request):
+    cart.add(product, unit_price=Decimal("9.99"), quantity=2)
+
+    assert cart_summary(context_with_request) == "$19.98"
+
+
+def test_cart_summary_returns_zero_dollars_when_context_has_no_request(
+    context_without_request,
+):
+    assert cart_summary(context_without_request) == "$0.00"
+
+
+# --------------------------------------------------------------------------- #
+# cart_is_empty
+# --------------------------------------------------------------------------- #
+
+def test_cart_is_empty_returns_true_for_empty_cart(db, context_with_request):
+    assert cart_is_empty(context_with_request) is True
+
+
+def test_cart_is_empty_returns_false_for_nonempty_cart(cart, product, context_with_request):
+    cart.add(product, unit_price=Decimal("9.99"), quantity=1)
+
+    assert cart_is_empty(context_with_request) is False
+
+
+def test_cart_is_empty_returns_true_when_context_has_no_request(context_without_request):
+    assert cart_is_empty(context_without_request) is True
+
+
+# --------------------------------------------------------------------------- #
+# cart_link
+# --------------------------------------------------------------------------- #
+
+def test_cart_link_returns_default_anchor(db, context_with_request):
+    result = cart_link(context_with_request)
+
+    assert '<a href="/cart/' in result
+    assert '>View Cart</a>' in result
+
+
+def test_cart_link_accepts_custom_text(db, context_with_request):
+    result = cart_link(context_with_request, text="Go to Cart")
+
+    assert '>Go to Cart</a>' in result
+
+
+def test_cart_link_accepts_css_class(db, context_with_request):
+    result = cart_link(context_with_request, text="Cart", css_class="btn btn-primary")
+
+    assert 'class="btn btn-primary"' in result
+
+
+def test_cart_link_falls_back_to_root_when_context_has_no_request(context_without_request):
+    result = cart_link(context_without_request)
+
+    assert '<a href="/cart/">View Cart</a>' in result

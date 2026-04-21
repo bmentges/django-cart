@@ -258,8 +258,14 @@ The suite is partway through the overhaul described in `docs/ROADMAP_2026_04.md`
 - ✅ Phase 0: scaffolding (this document, `conftest.py`,
   `test_conftest.py`, `pyproject.toml` config) merged. Released v3.0.3.
 - ✅ Phase 1: `test_session.py` rewritten as `test_session_adapters.py`,
-  the reference pytest example.
-- ⏭ Phases 2–5: remaining files migrated and split.
+  the reference pytest example. Targets v3.0.4.
+- ✅ Phase 2: `test_signals.py`, `test_templatetags.py`,
+  `test_performance.py` migrated. Wall-clock timings replaced with
+  `django_assert_num_queries` / `django_assert_max_num_queries` bounds.
+  Targets v3.0.5.
+- ⏭ Phase 3: replace `test_integration.py` (mock-based) with a real
+  HTTP test client suite.
+- ⏭ Phases 4–5: remaining files migrated and split.
 - ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 7: behavioural coverage audit, P0 regression `xfail` tests.
 - ⏭ Phase 8: `runtests.py` deleted, CI flipped to pytest-only, coverage
