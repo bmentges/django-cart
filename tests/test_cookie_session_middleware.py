@@ -117,19 +117,31 @@ def test_cookie_value_matches_created_cart_id(cookie_adapter_settings):
     assert response.cookies[CART_ID].value == str(cart.pk)
 
 
-def test_middleware_is_noop_when_request_never_constructed_a_cart(
-    cookie_adapter_settings,
-):
+def test_middleware_is_noop_when_request_never_constructed_a_cart():
     """Pages that never touch ``Cart(request)`` must still get a normal
     response — the middleware's guard on ``request._cart_session``
-    prevents a crash on the majority of non-cart routes."""
-    client = Client()
+    prevents a crash on the majority of non-cart routes.
 
-    response = client.get("/admin/login/")
+    Unit-level rather than HTTP-level: a client-driven version would
+    hit a template-rendering admin route, which trips a pre-existing
+    Py3.14 + Django<6 ``Context.__copy__`` bug (see
+    ``tests/test_cart_admin.py`` for the skip pattern). The guard is
+    fully covered by exercising the middleware directly.
+    """
+    from django.http import HttpResponse
+    from django.test import RequestFactory
 
-    assert response.status_code == 200
+    from cart.middleware import CartCookieMiddleware
+
+    sentinel = HttpResponse("ok")
+    middleware = CartCookieMiddleware(get_response=lambda request: sentinel)
+    request = RequestFactory().get("/whatever/")
+    assert not hasattr(request, "_cart_session")
+
+    response = middleware(request)
+
+    assert response is sentinel
     assert CART_ID not in response.cookies
-    assert CartModel.objects.count() == 0
 
 
 def test_cart_after_checkout_is_replaced_by_fresh_one(
