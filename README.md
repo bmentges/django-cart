@@ -277,6 +277,23 @@ for item in cart: ...     # iterates items, content_type preloaded
 Each `item` exposes `.product`, `.quantity`, `.unit_price`,
 `.total_price` (a `Decimal` property).
 
+> [!tip] Avoid the N+1 when rendering line-item tables
+> Plain iteration (`for item in cart`) leaves `item.product` as a
+> lazy property — touching `.product` on each item in a template
+> issues one SELECT per item. For render paths that read the
+> concrete product (name, image, SKU), use
+> `cart.items_with_products()`:
+>
+> ```python
+> for item in cart.items_with_products():
+>     # item.product is already prefetched — zero extra queries.
+>     ...
+> ```
+>
+> Batches products by content type under the hood: one SELECT on
+> `Item` plus one `in_bulk` per distinct product model. A 100-item
+> cart split across 3 product models drops from ~100 queries to 4.
+
 ### Money math
 
 ```python

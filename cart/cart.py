@@ -198,6 +198,51 @@ class Cart:
     def __contains__(self, product):
         return self._get_item(product) is not None
 
+    def items_with_products(self) -> list[models.Item]:
+        """Return the cart's items with their ``.product`` attribute prefetched.
+
+        Plain iteration (``for item in cart``) loads the items with their
+        content types but leaves ``Item.product`` as a lazy property — a
+        50-item cart then issues 50 ``SELECT`` statements when the
+        caller iterates and touches ``.product`` (classic N+1).
+
+        This method batches the product lookups: one ``SELECT`` on
+        ``Item`` (with ``select_related('content_type')``) plus one
+        ``in_bulk`` per distinct content type. A 100-item cart split
+        across 3 product models drops from ~100 queries to 4. Items
+        whose underlying product row was deleted are left un-prefetched
+        so the existing ``.product`` ``DoesNotExist`` semantic is
+        preserved on that first access.
+
+        Use this method when you iterate the cart and read the concrete
+        product — templates rendering a line-item table are the common
+        case. Plain iteration is fine when you only read ``.quantity``,
+        ``.unit_price``, or ``.total_price``.
+
+        Returns:
+            A list of :class:`cart.models.Item` with ``.product``
+            pre-cached on each item (where the row still exists).
+        """
+        from collections import defaultdict
+
+        items = list(self.cart.items.select_related("content_type").all())
+        items_by_ct: dict = defaultdict(list)
+        for item in items:
+            items_by_ct[item.content_type].append(item)
+
+        for content_type, grouped in items_by_ct.items():
+            ids = [i.object_id for i in grouped]
+            products_by_id = content_type.model_class().objects.in_bulk(ids)
+            for item in grouped:
+                product = products_by_id.get(item.object_id)
+                if product is not None:
+                    item._product_cache = product
+                # else: leave _product_cache unset — Item.product will
+                # hit the DB on first access and raise DoesNotExist,
+                # matching the plain-iteration contract.
+
+        return items
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

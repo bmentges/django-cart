@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- `Cart.items_with_products()` — batch-prefetching iteration path.
+  Loads items with `select_related('content_type')`, groups by
+  content type, and `in_bulk` fetches the product rows per type,
+  populating `Item._product_cache` so downstream `.product` access
+  is a pure in-memory read. A 100-item cart split across 3 product
+  models drops from ~100 queries (plain `for item in cart` + per-item
+  `.product` access) to 4. Plain iteration remains unchanged and is
+  still the right call when you don't read `.product`. Items whose
+  underlying product row was deleted are left un-prefetched so the
+  existing `DoesNotExist`-on-first-access semantic is preserved.
+
+### Docs
+- README "Iteration and introspection" section adds a callout
+  distinguishing plain iteration from `items_with_products()` for
+  line-item renders.
 
 ## [3.0.14] — 2026-04-21
 
