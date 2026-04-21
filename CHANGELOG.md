@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Merged to `master` but not yet tagged on PyPI.
+_No unreleased changes._
+
+## [3.0.11] — 2026-04-21
 
 ### Changed — Licensing
 
