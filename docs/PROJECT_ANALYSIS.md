@@ -1,5 +1,26 @@
 # django-cart Project Analysis
 
+> [!warning] Status: superseded (kept for historical reference)
+> This audit was written in March 2026 against **version 2.2.13**,
+> before v3.0.0 shipped discounts, tax, shipping, and inventory
+> checking. Several findings are now out of date:
+>
+> - "100% code coverage" — the current figure is **94%**, and
+>   coverage is treated as informational, not a merge gate.
+> - Recommendations for discounts / tax / shipping / inventory —
+>   **shipped in v3.0.0** (`cart/inventory.py`, `cart/shipping.py`,
+>   `cart/tax.py`, `cart/models.Discount`). See
+>   [`CHANGELOG.md`](../CHANGELOG.md#300--2026-03-29).
+> - Repo audits newer than this one: first
+>   [`PROJECT_ANALYSIS_2026_03_29_0243am.md`](PROJECT_ANALYSIS_2026_03_29_0243am.md)
+>   (version 3.0.1) — also superseded — and then the current plan of
+>   record, [`ROADMAP_2026_04.md`](ROADMAP_2026_04.md).
+>
+> For the active roadmap, issue list, and acceptance criteria, go to
+> **[`ROADMAP_2026_04.md`](ROADMAP_2026_04.md)**. This file is kept
+> on disk so prior links continue to resolve; treat its contents as
+> historical snapshot, not current guidance.
+
 **Analyst:** Senior E-Commerce Software Engineer  
 **Date:** March 2026  
 **Version Analyzed:** 2.2.13  
