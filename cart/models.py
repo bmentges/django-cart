@@ -19,10 +19,12 @@ class Cart(models.Model):
     creation_date: models.DateTimeField = models.DateTimeField(
         verbose_name=_("creation date"),
         default=timezone.now,
+        db_index=True,
     )
     checked_out: models.BooleanField = models.BooleanField(
         default=False,
         verbose_name=_("checked out"),
+        db_index=True,
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -78,7 +80,10 @@ class Item(models.Model):
         on_delete=models.CASCADE,
         related_name="items",
     )
-    quantity: int = models.PositiveIntegerField(verbose_name=_("quantity"))
+    quantity: int = models.PositiveIntegerField(
+        verbose_name=_("quantity"),
+        validators=[MinValueValidator(1)],
+    )
     unit_price: Decimal = models.DecimalField(
         max_digits=18,
         decimal_places=2,
