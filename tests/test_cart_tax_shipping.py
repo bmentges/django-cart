@@ -18,6 +18,19 @@ class TaxCalculator10Percent(TaxCalculator):
         return cart.summary() * Decimal("0.10")
 
 
+class TaxCalculatorTrailingDigits(TaxCalculator):
+    """Test double that returns an unrounded four-digit Decimal.
+
+    Exists to prove ``Cart.total()`` collapses long-tail decimals from
+    aggregated calculators into 2dp — long-tail noise (e.g. real-world
+    compound tax rates) otherwise leaks into display and into any
+    downstream system that treats ``total()`` as already-rounded.
+    """
+
+    def calculate(self, cart):
+        return Decimal("13.3375")
+
+
 class ShippingCalculatorFlatRate(ShippingCalculator):
     """Module-level test double — $10 flat shipping."""
 
@@ -90,3 +103,31 @@ def test_total_is_clamped_to_zero_when_discount_exceeds_subtotal(cart_worth_200)
     cart_worth_200.apply_discount("HUGE")
 
     assert cart_worth_200.total() == Decimal("0.00")
+
+
+def test_total_is_rounded_to_two_decimal_places(cart_worth_200, settings):
+    """P2 regression: ``Cart.total()`` used to return the raw sum of
+    subtotal − discount + tax + shipping with no explicit quantize, so
+    a TaxCalculator returning ``Decimal('13.3375')`` surfaced
+    ``Decimal('213.3375')`` from ``total()`` — four decimal places
+    bleeding into money fields, confusing downstream display code that
+    assumes 2dp. Total must round half-up to ``Decimal('213.34')``.
+    """
+    settings.CART_TAX_CALCULATOR = (
+        "tests.test_cart_tax_shipping.TaxCalculatorTrailingDigits"
+    )
+
+    assert cart_worth_200.total() == Decimal("213.34")
+
+
+def test_total_returns_decimal_quantized_to_2dp_even_without_extras(
+    cart_worth_200,
+):
+    """Even when no tax / shipping / discount is in play, the returned
+    Decimal must be quantized — otherwise a downstream ``str(total)``
+    might render ``"200"`` on one cart and ``"200.00"`` on another,
+    depending on how the subtotal was constructed."""
+    total = cart_worth_200.total()
+
+    assert total == Decimal("200.00")
+    assert total.as_tuple().exponent == -2

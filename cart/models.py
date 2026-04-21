@@ -218,26 +218,42 @@ class Discount(models.Model):
         """Validate cross-field invariants.
 
         - A ``PERCENT`` discount cannot claim more than 100% off.
-          Django admin forms and any caller using ``full_clean()``
-          before ``save()`` rejects such rows before they reach the DB.
-          The guard is not a DB ``CheckConstraint`` because the
-          ``CheckConstraint(check=…)`` / ``CheckConstraint(condition=…)``
-          kwarg renamed between Django 5.0 and 6.0, and the project's
-          supported matrix spans both. Once 4.2 drops off the matrix,
-          a DB-level constraint can be added without compat pain.
+        - ``valid_from`` must not be later than ``valid_until`` when
+          both are set (``None`` on either side means open-ended and
+          skips the check; equal instants are allowed).
+
+        Django admin forms and any caller using ``full_clean()`` before
+        ``save()`` rejects such rows before they reach the DB. The
+        guards are not DB-level ``CheckConstraint``s because the
+        ``check=`` / ``condition=`` kwarg renamed between Django 5.0
+        and 6.0 and the project's supported matrix spans both; once
+        4.2 drops off the matrix, DB-level constraints can be added
+        without compat pain.
         """
         super().clean()
+        errors: dict[str, str] = {}
+
         if (
             self.discount_type == DiscountType.PERCENT
             and self.value is not None
             and self.value > Decimal("100")
         ):
-            raise ValidationError({
-                "value": _(
-                    "Percentage discounts cannot exceed 100% — "
-                    "value must be between 0 and 100."
-                ),
-            })
+            errors["value"] = _(
+                "Percentage discounts cannot exceed 100% — "
+                "value must be between 0 and 100."
+            )
+
+        if (
+            self.valid_from is not None
+            and self.valid_until is not None
+            and self.valid_from > self.valid_until
+        ):
+            errors["valid_until"] = _(
+                "valid_until must be the same as or later than valid_from."
+            )
+
+        if errors:
+            raise ValidationError(errors)
 
     def calculate_discount(self, cart: "Cart") -> Decimal:
         """Calculate the discount amount for the given cart.

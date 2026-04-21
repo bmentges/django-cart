@@ -280,3 +280,87 @@ def test_from_serializable_accepts_legacy_object_id_keys(rf_request, product):
     assert item.object_id == product.pk
     assert item.quantity == 4
     assert item.unit_price == Decimal("12.00")
+
+
+# --------------------------------------------------------------------------- #
+# P2: applied discount survives the round-trip
+#
+# Before v3.0.14, cart_serializable dropped the applied Discount on the
+# floor — a "restore cart on a new device" flow lost the promo code the
+# user had already applied. The payload now carries the code under a
+# reserved ``__discount__`` key; from_serializable reattaches the
+# matching Discount row. See docs/ANALYSIS.md §0 (P2 list).
+# --------------------------------------------------------------------------- #
+
+def test_cart_serializable_emits_applied_discount_code(cart, product):
+    from cart.models import Discount, DiscountType
+
+    Discount.objects.create(
+        code="ROUND_TRIP",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+    )
+    cart.add(product, Decimal("10.00"), quantity=1)
+    cart.apply_discount("ROUND_TRIP")
+
+    data = cart.cart_serializable()
+
+    assert data["__discount__"] == {"code": "ROUND_TRIP"}
+
+
+def test_cart_serializable_emits_null_discount_when_none_applied(cart, product):
+    """The ``__discount__`` key must be absent (or explicitly null)
+    when no discount is applied — tests must be able to distinguish
+    'payload omitted the field' from 'no discount'."""
+    cart.add(product, Decimal("10.00"), quantity=1)
+
+    data = cart.cart_serializable()
+
+    assert "__discount__" not in data
+
+
+def test_round_trip_reattaches_applied_discount(cart, product):
+    from django.test import RequestFactory
+    from cart.models import Discount, DiscountType
+
+    Discount.objects.create(
+        code="ROUND_TRIP",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+    )
+    cart.add(product, Decimal("10.00"), quantity=1)
+    cart.apply_discount("ROUND_TRIP")
+    payload = cart.cart_serializable()
+
+    fresh_request = RequestFactory().get("/")
+    fresh_request.session = {}
+    restored = Cart.from_serializable(fresh_request, payload)
+
+    assert restored.discount_code() == "ROUND_TRIP"
+
+
+def test_round_trip_skips_silently_if_referenced_discount_deleted(cart, product):
+    """If the Discount row has been removed between serialise and
+    restore (expired cleanup, admin deletion), reattaching would raise.
+    Silent skip is safer — the cart restores without a discount and
+    the caller can decide whether to surface the miss."""
+    from django.test import RequestFactory
+    from cart.models import Discount, DiscountType
+
+    Discount.objects.create(
+        code="GONE",
+        discount_type=DiscountType.PERCENT,
+        value=Decimal("10.00"),
+    )
+    cart.add(product, Decimal("10.00"), quantity=1)
+    cart.apply_discount("GONE")
+    payload = cart.cart_serializable()
+
+    Discount.objects.filter(code="GONE").delete()
+
+    fresh_request = RequestFactory().get("/")
+    fresh_request.session = {}
+    restored = Cart.from_serializable(fresh_request, payload)
+
+    assert restored.discount_code() is None
+    assert restored.count() == 1  # items are still restored

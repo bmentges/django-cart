@@ -51,12 +51,16 @@ def test_custom_tax_calculator_subclass_is_usable_inline():
 
 
 @pytest.mark.django_db
-def test_get_tax_calculator_falls_back_to_default_when_class_path_is_bad(settings):
-    """Covers cart/tax.py:97-98 — the ImportError/AttributeError
-    fallback. Today's behaviour (silent fallback) is locked in; P1-4
-    will add a warning log around it."""
+def test_get_tax_calculator_warns_and_falls_back_when_class_path_is_bad(settings):
+    """P2 regression: misconfigured ``CART_TAX_CALCULATOR`` used to
+    silently collapse to the default zero-tax calculator — a typo in
+    ``settings.py`` produced "tax is always 0" at runtime with no log
+    entry. The factory now emits a :class:`RuntimeWarning` naming the
+    setting, the bad path, and the underlying exception before falling
+    back to the default."""
     settings.CART_TAX_CALCULATOR = "nonexistent.module.FakeTax"
 
-    calculator = get_tax_calculator()
+    with pytest.warns(RuntimeWarning, match="CART_TAX_CALCULATOR"):
+        calculator = get_tax_calculator()
 
     assert isinstance(calculator, DefaultTaxCalculator)

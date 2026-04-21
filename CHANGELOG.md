@@ -19,6 +19,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CheckConstraint` is not added — the `check=` / `condition=`
   kwarg renamed between Django 5.0 and 6.0 and the supported
   matrix spans both; the constraint will follow once 4.2 rolls off.
+- **P2** · `Discount.clean()` additionally rejects rows where
+  `valid_from > valid_until`. Admin copy-pasting inverted dates
+  (a common promo-config mistake) is now caught at form
+  validation time; equal instants and open-ended windows (either
+  bound `None`) remain valid.
+- **P2** · `cart_serializable()` now emits the applied discount's
+  `code` under a reserved `__discount__` key, and
+  `from_serializable()` reattaches the matching `Discount` row on
+  restore. A "restore cart on a new device" flow that previously
+  lost the promo code keeps it. If the referenced `Discount` has
+  been deleted between serialise and restore, the reattach is
+  silently skipped — items still restore.
+- **P2** · `Cart.total()` now quantizes its return value to 2dp
+  with `ROUND_HALF_UP`. Aggregating `summary − discount + tax +
+  shipping` can produce long-tail digits when any of the
+  calculators returns a computed rate (e.g. compound tax);
+  callers that stringified `total()` for display previously saw
+  3–4 decimal places leaking into money fields.
+- **P2** · `CartAdmin` gains `search_fields = ("=id",)` so the
+  changelist search box actually filters by cart id. Pre-fix it
+  was a no-op — the existing "search filters by cart id" test
+  passed vacuously because the changelist returned every cart
+  regardless of `?q=`. The test is now hardened to also assert
+  that non-matching carts are excluded.
+- **P2** · `get_tax_calculator()`, `get_shipping_calculator()`,
+  and `get_inventory_checker()` now emit a `RuntimeWarning` when
+  the configured dotted path fails to import or resolve, before
+  falling back to the default implementation. Pre-fix, a typo in
+  `CART_TAX_CALCULATOR` silently produced "tax is always 0.00"
+  at runtime. The session-adapter factory is still the strict
+  exception — it raises loudly, unchanged.
 
 ## [3.0.13] — 2026-04-21
 

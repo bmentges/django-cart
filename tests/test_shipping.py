@@ -74,11 +74,15 @@ def test_custom_shipping_calculator_subclass_is_usable_inline():
 
 
 @pytest.mark.django_db
-def test_get_shipping_calculator_falls_back_to_default_when_class_path_is_bad(settings):
-    """Covers cart/shipping.py:143-144 — ImportError/AttributeError
-    fallback. P1-4 adds a warning log around this."""
+def test_get_shipping_calculator_warns_and_falls_back_when_class_path_is_bad(settings):
+    """P2 regression: misconfigured ``CART_SHIPPING_CALCULATOR`` used
+    to silently collapse to the default zero-cost calculator — a typo
+    produced "free shipping" without a log entry. The factory now
+    emits a :class:`RuntimeWarning` naming the setting before falling
+    back to the default."""
     settings.CART_SHIPPING_CALCULATOR = "nonexistent.module.FakeShipping"
 
-    calculator = get_shipping_calculator()
+    with pytest.warns(RuntimeWarning, match="CART_SHIPPING_CALCULATOR"):
+        calculator = get_shipping_calculator()
 
     assert isinstance(calculator, DefaultShippingCalculator)
