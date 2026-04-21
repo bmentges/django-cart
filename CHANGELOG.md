@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [3.0.13] — 2026-04-21
+
 ### Added
 - `tests/test_readme.py` — link-integrity checks for `README.md`.
   Fails CI if any relative repo path or intra-doc `#anchor` goes dead.
