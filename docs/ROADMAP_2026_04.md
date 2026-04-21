@@ -796,7 +796,7 @@ v3.0.5 (shipped 2026-04-20) → P-1 Phase 1 + Phase 2 combined:
                                 (reproducible across hardware; catches
                                 N+1 regressions that wall clock masks).
                               No behaviour change.
-v3.0.6 (this PR)            → P-1 Phase 3: replace test_integration.py
+v3.0.6 (shipped 2026-04-20) → P-1 Phase 3: replace test_integration.py
                               (MagicMock-based, misnamed — tested Cart
                               at unit level with mock requests) with
                               tests/test_http_integration.py. New file
@@ -811,7 +811,28 @@ v3.0.6 (this PR)            → P-1 Phase 3: replace test_integration.py
                               assertion that was hiding in the legacy
                               file (test_performance_with_decimal_precision)
                               — scope creep from Phase 2 but caught
-                              here. No behaviour change.
+                              here. Ships a test-only handler404 in
+                              tests/urls.py to dodge a Django <6.0 +
+                              Python 3.14 Context.__copy__ bug that
+                              fires when the default 404 view renders
+                              its template. No cart behaviour change.
+v3.0.7 (this PR)            → P-1 Phase 4: split test_v300.py into
+                              seven focused files — test_tax.py (4),
+                              test_shipping.py (5), test_inventory.py
+                              (8, includes Cart.add(check_inventory=True)
+                              integration), test_discount_model.py (17),
+                              test_cart_discounts.py (9),
+                              test_cart_tax_shipping.py (8),
+                              test_cart_checkout.py (3, seeded). 64
+                              legacy tests in → 54 pytest tests out;
+                              10 deleted as reflection
+                              (NewExceptionsTest, DiscountModelFieldsTest,
+                              CartDiscountFieldTest.test_cart_discount_field_exists,
+                              the three _interface_is_abstract tests).
+                              Custom* calculator test doubles moved
+                              out of the file bottom into the relevant
+                              file that references them via dotted path.
+                              No cart behaviour change.
 v3.0.7 (patch)              → P-1 Phase 4: migrate test_v300.py; split
                               discounts / tax / shipping / inventory
                               into their own files.
