@@ -292,12 +292,25 @@ class Cart:
         Example output::
 
             {
-                "42": {"total_price": "19.98", "quantity": 2, "unit_price": "9.99"},
+                "42": {
+                    "content_type_id": 7,
+                    "total_price": "19.98",
+                    "unit_price": "9.99",
+                    "quantity": 2,
+                },
                 ...
             }
+
+        The ``content_type_id`` field was added in v3.0.11 (P0-1 fix —
+        see docs/ROADMAP_2026_04.md §P0-1). It lets
+        :meth:`from_serializable` create items in a fresh cart rather
+        than silently no-op'ing. Pre-v3.0.11 payloads (without this
+        field) can still update items already present in the target
+        cart; they cannot restore into an empty one.
         """
         return {
             str(item.object_id): {
+                "content_type_id": item.content_type_id,
                 "total_price": str(item.total_price),
                 "unit_price": str(item.unit_price),
                 "quantity": item.quantity,
@@ -310,29 +323,57 @@ class Cart:
         """
         Restore a cart from serializable data.
 
+        Creates any items whose ``object_id`` isn't already present in
+        the target cart, provided the payload supplies
+        ``content_type_id`` alongside them. Items that already exist are
+        updated in place from ``quantity`` / ``unit_price`` if given.
+
         :param request: Django request object.
         :param data: Dict as produced by :meth:`cart_serializable`.
         :returns: A :class:`Cart` instance with the restored items.
+        :raises ValueError: if the payload is missing ``content_type_id``
+            for an item that isn't already present in the target cart.
+            Pre-v3.0.11 payloads lack this field and can only update
+            pre-existing items.
 
         Example::
 
-            cart_data = {
-                "42": {"total_price": "19.98", "quantity": 2, "unit_price": "9.99"},
-            }
-            cart = Cart.from_serializable(request, cart_data)
+            serialised = cart.cart_serializable()
+            # ...later, possibly from a different request...
+            restored = Cart.from_serializable(new_request, serialised)
         """
         cart = cls(request)
-        for object_id, item_data in data.items():
-            from django.contrib.contenttypes.models import ContentType
-            item = models.Item.objects.filter(
-                cart=cart.cart,
-                object_id=object_id
-            ).first()
-            if item:
-                item.quantity = item_data.get("quantity", item.quantity)
-                if "unit_price" in item_data:
-                    item.unit_price = Decimal(item_data["unit_price"])
-                item.save()
+        with transaction.atomic():
+            for object_id, item_data in data.items():
+                item = models.Item.objects.filter(
+                    cart=cart.cart,
+                    object_id=object_id,
+                ).first()
+                if item is not None:
+                    item.quantity = item_data.get("quantity", item.quantity)
+                    if "unit_price" in item_data:
+                        item.unit_price = Decimal(item_data["unit_price"])
+                    item.save()
+                    continue
+
+                content_type_id = item_data.get("content_type_id")
+                if content_type_id is None:
+                    raise ValueError(
+                        f"Cannot restore item object_id={object_id!r}: "
+                        "payload is missing 'content_type_id'. Pre-v3.0.11 "
+                        "serialised payloads lack this field and can only "
+                        "update items already present in the cart."
+                    )
+
+                models.Item.objects.create(
+                    cart=cart.cart,
+                    content_type_id=content_type_id,
+                    object_id=int(object_id),
+                    quantity=item_data.get("quantity", 1),
+                    unit_price=Decimal(item_data.get("unit_price", "0.00")),
+                )
+
+        cart._invalidate_cache()
         return cart
 
     def merge(self, other_cart: "Cart", strategy: str = "add") -> None:
