@@ -26,16 +26,22 @@ dev = [
 # --------------------------------------------------------------------------- #
 # pytest configuration
 # --------------------------------------------------------------------------- #
-# During the P-1 test overhaul (docs/ROADMAP_2026_04.md) both pytest functions
-# and legacy TestCase subclasses coexist. Phase 8 exit tightens this config:
-#   - add `python_classes = []` to reject TestCase collection
-#   - add `filterwarnings = ["error"]` to fail on unexpected warnings
-# Do not tighten these early — it would break the existing suite mid-migration.
+# python_classes = [] rejects any class-based test collection — the P-1
+# overhaul retired all TestCase subclasses. If a future PR accidentally
+# adds one, it will be silently ignored rather than run, which makes the
+# collection count mismatch loud in review.
+#
+# filterwarnings = ["error"] is intentionally NOT set: upstream Django
+# and Python emit DeprecationWarnings that are outside our control
+# (e.g. asyncio.iscoroutinefunction under Py3.16, USE_TZ default shift
+# on older Django). Promoting those to errors would make CI brittle
+# against unrelated platform noise.
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = ["."]
 python_files = ["test_*.py"]
+python_classes = []
 addopts = [
     "--strict-markers",
     "--strict-config",
@@ -46,8 +52,13 @@ markers = [
 ]
 
 # --------------------------------------------------------------------------- #
-# Coverage configuration (replaces .coveragerc as of Phase 0)
+# Coverage configuration
 # --------------------------------------------------------------------------- #
+# `fail_under = 90` acts as a local caution line — `coverage report`
+# exits non-zero if coverage drops below 90% on a developer's machine.
+# CI does NOT run `coverage report`, so this is advisory, never a
+# blocker. Current coverage is ~98%; the 8% buffer leaves room for
+# legitimate churn without needing to fiddle with the threshold.
 
 [tool.coverage.run]
 source = ["cart"]
@@ -67,7 +78,7 @@ exclude_lines = [
 ]
 show_missing = true
 skip_covered = false
-# fail_under = 100 — enabled in Phase 8 once behavioural audit is complete
+fail_under = 90
 
 [tool.coverage.html]
 directory = "htmlcov"

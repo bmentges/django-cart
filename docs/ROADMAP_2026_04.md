@@ -861,7 +861,7 @@ v3.0.8 (patch)              → P-1 Phase 5: migrate test_cart.py (~2200
                               lines, 177 tests). May land as a series
                               of PRs per split file, each green, under
                               the 3.0.8 umbrella tag.
-v3.0.9 (this PR)            → P-1 Phases 6 + 7 combined: Phase 6's
+v3.0.9 (shipped 2026-04-21) → P-1 Phases 6 + 7 combined: Phase 6's
                               reflection-test deletion pass was done
                               inline across Phases 1–5 and left
                               nothing of substance to remove, so it's
@@ -899,11 +899,49 @@ v3.0.9 (this PR)            → P-1 Phases 6 + 7 combined: Phase 6's
                               in P1-11) and an orphan admin method
                               (cart/admin.py:11 — admin-config bug
                               tracked separately).
-v3.0.10 (patch)             → P-1 Phase 8: unify test runner, delete
-                              runtests.py, tighten pytest config
-                              (python_classes=[], filterwarnings=error),
-                              enable coverage --fail-under=100 in CI.
-                              P-1 complete.
+v3.0.10 (this PR)           → P-1 Phase 8: runner unification.
+                              Deliverables that shipped:
+                              - Delete runtests.py (pytest is the only
+                                runner path; the settings-divergence
+                                landmine — historical §7.4 in CLAUDE.md
+                                — is gone).
+                              - Delete tests/fixtures/fake_products.json
+                                (unused).
+                              - Tighten pyproject pytest config with
+                                python_classes = [] so accidental
+                                class-based tests are uncollected
+                                rather than silently run. Every test
+                                file uses pytest functions + fixtures
+                                after Phase 5.
+                              Deliberate DEPARTURES from the original
+                              Phase 8 plan, per maintainer direction
+                              2026-04-21:
+                              - filterwarnings = ["error"] NOT set.
+                                Upstream Django and Python emit
+                                DeprecationWarnings outside our control
+                                (asyncio.iscoroutinefunction on Py3.16,
+                                USE_TZ default on older Django, etc.).
+                                Promoting those to errors would make
+                                CI brittle against platform noise.
+                              - coverage --fail-under=100 NOT enforced
+                                in CI. Instead, pyproject sets
+                                [tool.coverage.report] fail_under = 90
+                                as a LOCAL-only advisory floor —
+                                `coverage report` exits non-zero below
+                                90% on a developer's machine, CI does
+                                not run `coverage report` so the
+                                threshold is never a merge blocker.
+                                Rationale: coverage is a lagging
+                                indicator of behavioural completeness;
+                                enforcing a hard % gate incentivises
+                                gaming the metric rather than auditing
+                                behaviour. Let humans judge on PR
+                                review; the 90% floor catches
+                                catastrophic drops.
+                              P-1 COMPLETE. Every subsequent cart
+                              behaviour change lands as "failing test
+                              first, then the fix" on the pytest
+                              foundation built over v3.0.3–v3.0.10.
 v3.0.11 .. v3.0.17 (patch)  → P0 bug fixes, one per release, each
                               removing an @xfail marker as the fix:
                               3.0.11 = P0-1 (from_serializable)

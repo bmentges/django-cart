@@ -62,8 +62,7 @@ docs/
 ├── PROJECT_ANALYSIS_2026_03_29_0243am.md  # earlier snapshot
 └── ROADMAP.md                       # thin "future considerations" list
 
-runtests.py                  # standalone Django test runner — DIVERGES from tests/settings.py (§7.4)
-.coveragerc                  # branch coverage, excludes tests + migrations
+pyproject.toml               # pytest + coverage config (runtests.py deleted in Phase 8; .coveragerc folded in at Phase 0)
 .pre-commit-config.yaml      # black, isort, flake8, mypy — NOT run in CI (§7.8)
 .github/workflows/ci.yml     # test matrix + publish-on-tag to PyPI
 .github/dependabot.yml       # weekly pip + gh-actions updates
@@ -270,16 +269,15 @@ unit tests. Nothing goes through Django's test client, middleware, or URL
 routing. A real integration failure at the view/middleware boundary would not
 be caught.
 
-### 7.4 Two divergent test configurations
+### 7.4 ~~Two divergent test configurations~~ (resolved in v3.0.10)
 
-- `pyproject.toml` sets `DJANGO_SETTINGS_MODULE = "tests.settings"` for pytest.
-- `runtests.py` ignores that and calls `settings.configure(...)` with its own
-  inline settings (different `INSTALLED_APPS`, middleware, `TEMPLATES`).
+Historically: `pyproject.toml` targeted pytest at `tests.settings` while
+`runtests.py` reconfigured Django inline with different `INSTALLED_APPS`,
+middleware, and `TEMPLATES`. The two runners could diverge silently.
 
-`tests/settings.py` has `django.contrib.staticfiles` and `ROOT_URLCONF`;
-`runtests.py` does not. `tests/settings.py` has `SECRET_KEY = "secretkey"`;
-`runtests.py` never sets one. They happen to produce the same test results
-*today*, but this is a maintenance landmine. Unify them.
+P-1 Phase 8 (v3.0.10) deleted `runtests.py`; pytest + `tests/settings.py`
+is now the only test-runner path. Left here as a pointer for anyone
+reading older commit messages that still mention the landmine.
 
 ### 7.5 `Discount.current_uses` never increments automatically
 
@@ -427,19 +425,24 @@ usage, the merge flow, and the session-adapter setting (§7.2, §7.14).
 
 ## 9. Test strategy guidelines
 
-**Status:** the test suite is mid-migration. Decisions (2026-04-20, maintainer):
+**Status:** the P-1 test overhaul is **complete** as of v3.0.10.
+pytest + pytest-django with `conftest.py` fixtures is the only test
+pattern. The maintainer's founding decisions (2026-04-20):
 
-- **Framework:** **pytest + pytest-django**. Django `TestCase` is being
-  retired. Do not add new `TestCase` subclasses; new tests are pytest
-  functions that use fixtures from `tests/conftest.py`.
-- **Discipline:** **TDD from this point forward.** Every bug fix lands
-  as a failing test first, then the fix. Every new feature lands the
-  same way. No exceptions.
+- **Framework:** **pytest + pytest-django**. No `TestCase` subclasses.
+  `pyproject.toml` sets `python_classes = []` so accidental class-based
+  tests are uncollected (noisy in review).
+- **Discipline:** **TDD.** Every bug fix lands as a failing test first,
+  then the fix. Every new feature lands the same way. No exceptions.
 - **Reflection tests:** **delete, don't preserve.** A test that asserts
   `__annotations__`, `admin.list_display`, `hasattr(obj, '_private')`,
   or `issubclass(X, Exception)` verifies Python/Django mechanics, not
   django-cart behaviour. Replace with a test that would fail if the
   feature actually broke for a user — or delete outright.
+- **Coverage:** informational, not enforced. `pyproject.toml` sets
+  `[tool.coverage.report] fail_under = 90` so `coverage report` exits
+  non-zero locally when coverage drops below 90%. CI does not run
+  `coverage report`; it is advisory, never a merge blocker.
 
 ### Working rules (post-migration; during migration, follow the file
 you're editing)
