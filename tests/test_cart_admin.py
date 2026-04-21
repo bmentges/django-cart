@@ -9,14 +9,36 @@ the actual user-facing admin surface via the Django test client.
 """
 from __future__ import annotations
 
+import sys
 from decimal import Decimal
 
+import django
 import pytest
 
 from cart.models import Cart as CartModel
 
 
-pytestmark = pytest.mark.django_db
+# Django <6.0 Context.__copy__ assigns to a super() proxy, which Python
+# 3.14 forbids. The test client's template-capture instrumentation fires
+# it on every admin page render, so we can't cover admin via the Client
+# on that combo. Not a django-cart bug; Django fixed Context.__copy__
+# in 6.0. Coverage still runs on every other combo (py3.10–3.13 × all
+# Django, and py3.14 × Django 6.0+).
+_DJANGO_CONTEXT_COPY_BROKEN_ON_PY314 = (
+    sys.version_info >= (3, 14) and django.VERSION[:2] < (6, 0)
+)
+
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skipif(
+        _DJANGO_CONTEXT_COPY_BROKEN_ON_PY314,
+        reason=(
+            "Django <6.0 Context.__copy__ incompatible with Python 3.14 "
+            "test-client instrumentation (assigns to super() proxy). "
+            "Fixed in Django 6.0; unrelated to django-cart."
+        ),
+    ),
+]
 
 
 @pytest.fixture
