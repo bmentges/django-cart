@@ -96,12 +96,13 @@ def test_shared_session_yields_same_cart_across_requests():
     assert c1.cart.pk == c2.cart.pk
 
 
-def test_carts_session_adapter_class_setting_is_honoured(settings, rf_request):
-    """Setting the adapter class should cause Cart to route session ops
-    through it, leaving request.session untouched."""
-    settings.CARTS_SESSION_ADAPTER_CLASS = (
-        "tests.test_cart_init._RecordingSessionAdapter"
-    )
+def test_cart_session_adapter_setting_routes_session_ops_through_the_adapter(
+    settings, rf_request
+):
+    """Setting ``CART_SESSION_ADAPTER`` should cause Cart to route
+    session ops through the configured adapter, leaving
+    ``request.session`` untouched."""
+    settings.CART_SESSION_ADAPTER = "tests.test_cart_init._RecordingSessionAdapter"
 
     Cart(rf_request)
 
@@ -111,9 +112,7 @@ def test_carts_session_adapter_class_setting_is_honoured(settings, rf_request):
 def test_adapter_receives_the_new_cart_id_on_creation(settings, rf_request):
     """The adapter's set_cart_id must be called with the freshly-created
     cart's pk when the session had no prior cart."""
-    settings.CARTS_SESSION_ADAPTER_CLASS = (
-        "tests.test_cart_init._RecordingSessionAdapter"
-    )
+    settings.CART_SESSION_ADAPTER = "tests.test_cart_init._RecordingSessionAdapter"
     _RecordingSessionAdapter.calls.clear()
 
     cart = Cart(rf_request)
@@ -126,7 +125,7 @@ def test_setting_accepts_a_class_object_not_just_a_dotted_string(settings, rf_re
     """The README advertises both
     ``CARTS_SESSION_ADAPTER_CLASS = MyAdapter`` and
     ``= "dotted.path.MyAdapter"`` — both must work."""
-    settings.CARTS_SESSION_ADAPTER_CLASS = _RecordingSessionAdapter
+    settings.CART_SESSION_ADAPTER = _RecordingSessionAdapter
     _RecordingSessionAdapter.calls.clear()
 
     Cart(rf_request)
@@ -139,7 +138,66 @@ def test_bad_dotted_path_raises_loudly_no_silent_fallback(settings, rf_request):
     """Session storage is too critical to silently fall back to the
     default on a typo — unlike the tax / shipping / inventory
     factories. A bad dotted path must raise."""
-    settings.CARTS_SESSION_ADAPTER_CLASS = "nonexistent.module.FakeAdapter"
+    settings.CART_SESSION_ADAPTER = "nonexistent.module.FakeAdapter"
 
     with pytest.raises(ImportError):
         Cart(rf_request)
+
+
+# --------------------------------------------------------------------------- #
+# v3.1.0: CART_SESSION_ADAPTER is the new canonical (singular) name;
+# CARTS_SESSION_ADAPTER_CLASS is still honoured with a DeprecationWarning.
+# --------------------------------------------------------------------------- #
+
+
+def test_CART_SESSION_ADAPTER_singular_setting_is_honoured(settings, rf_request):
+    """The new canonical setting name — singular ``CART_SESSION_ADAPTER``
+    — matches the ``CART_TAX_CALCULATOR`` / ``CART_SHIPPING_CALCULATOR``
+    / ``CART_INVENTORY_CHECKER`` pattern. No warning fires when it's
+    used."""
+    import warnings
+
+    settings.CART_SESSION_ADAPTER = "tests.test_cart_init._RecordingSessionAdapter"
+    _RecordingSessionAdapter.calls.clear()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        Cart(rf_request)
+
+    assert ("get_or_create_cart_id",) in _RecordingSessionAdapter.calls
+
+
+def test_legacy_CARTS_SESSION_ADAPTER_CLASS_still_works_with_deprecation_warning(
+    settings, rf_request
+):
+    """Back-compat — the pre-v3.1.0 plural setting still wires the
+    adapter through, but emits a DeprecationWarning naming the new
+    singular setting so downstream users have a clean migration path."""
+    settings.CART_SESSION_ADAPTER = None
+    settings.CARTS_SESSION_ADAPTER_CLASS = (
+        "tests.test_cart_init._RecordingSessionAdapter"
+    )
+    _RecordingSessionAdapter.calls.clear()
+
+    with pytest.warns(DeprecationWarning, match="CART_SESSION_ADAPTER"):
+        Cart(rf_request)
+
+    assert ("get_or_create_cart_id",) in _RecordingSessionAdapter.calls
+
+
+def test_new_setting_takes_precedence_over_legacy_when_both_set(settings, rf_request):
+    """If someone has both defined during a migration window, the new
+    singular setting wins and no warning fires — the legacy value is
+    ignored."""
+    import warnings
+
+    settings.CART_SESSION_ADAPTER = "tests.test_cart_init._RecordingSessionAdapter"
+    settings.CARTS_SESSION_ADAPTER_CLASS = "nonexistent.module.WouldCrash"
+    _RecordingSessionAdapter.calls.clear()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        Cart(rf_request)
+
+    # No ImportError — new setting was read, legacy ignored.
+    assert ("get_or_create_cart_id",) in _RecordingSessionAdapter.calls

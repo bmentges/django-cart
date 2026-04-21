@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from cart.cart import Cart
+from cart.cart import Cart, CartException, MinimumOrderNotMet
 
 pytestmark = pytest.mark.django_db
 
@@ -73,14 +73,35 @@ def test_checkout_marks_the_cart_checked_out(cart, product):
     assert cart.cart.checked_out is True
 
 
-def test_checkout_is_allowed_on_an_empty_cart_by_design(cart):
-    """Until P1-2 lands in 3.1.0, Cart.checkout() is lax by design —
-    it does not enforce can_checkout(). This test locks in the current
-    contract so P1-2's change surfaces clearly on diff."""
-    cart.checkout()
+def test_checkout_rejects_empty_cart_with_cart_exception(cart):
+    """v3.1.0 BREAKING: ``Cart.checkout()`` now enforces
+    ``can_checkout()`` before mutating. Empty-cart checkouts raise
+    ``CartException`` instead of silently marking an empty cart as
+    checked out — which was a documented footgun before (every
+    abandoned cart could be "checked out" and poison analytics)."""
+    with pytest.raises(CartException, match="empty"):
+        cart.checkout()
 
     cart.cart.refresh_from_db()
-    assert cart.cart.checked_out is True
+    assert cart.cart.checked_out is False
+
+
+def test_checkout_rejects_cart_below_min_order_amount_with_minimum_order_not_met(
+    cart, product, settings
+):
+    """v3.1.0 BREAKING: sub-minimum carts now raise
+    ``MinimumOrderNotMet`` at checkout time. The exception class has
+    existed since v3.0.0 but was never raised by the library itself —
+    callers only saw the message via ``can_checkout()``'s
+    ``(False, message)`` tuple and had to implement their own check."""
+    settings.CART_MIN_ORDER_AMOUNT = Decimal("500.00")
+    cart.add(product, unit_price=Decimal("100.00"), quantity=2)
+
+    with pytest.raises(MinimumOrderNotMet, match="500.00"):
+        cart.checkout()
+
+    cart.cart.refresh_from_db()
+    assert cart.cart.checked_out is False
 
 
 # --------------------------------------------------------------------------- #
@@ -88,7 +109,8 @@ def test_checkout_is_allowed_on_an_empty_cart_by_design(cart):
 # --------------------------------------------------------------------------- #
 
 
-def test_a_fresh_request_after_checkout_yields_a_new_cart(cart, rf_request):
+def test_a_fresh_request_after_checkout_yields_a_new_cart(cart, product, rf_request):
+    cart.add(product, Decimal("1.00"))
     cart.checkout()
 
     fresh = Cart(rf_request)
