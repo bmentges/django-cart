@@ -96,16 +96,37 @@ class Cart:
         A bad dotted path raises ``ImportError`` — session storage is
         too critical to silently fall back to the default (unlike the
         tax / shipping / inventory factories).
+
+        The adapter is cached on ``request._cart_session`` so that:
+        (a) multiple ``Cart(request)`` constructions within one request
+        share the same adapter — mutations to an in-memory cookie dict
+        in the first call are visible to the second; and
+        (b) :class:`cart.middleware.CartCookieMiddleware` can find the
+        adapter after the view returns to flush pending cookies onto
+        the response (P0-A fix — v3.0.12).
         """
+        existing = getattr(request, "_cart_session", None)
+        if existing is not None:
+            return existing
+
         from .session import DjangoSessionAdapter
 
         adapter = getattr(settings, "CARTS_SESSION_ADAPTER_CLASS", None)
         if adapter is None:
-            return DjangoSessionAdapter(request)
-        if isinstance(adapter, str):
-            from django.utils.module_loading import import_string
-            adapter = import_string(adapter)
-        return adapter(request)
+            instance = DjangoSessionAdapter(request)
+        else:
+            if isinstance(adapter, str):
+                from django.utils.module_loading import import_string
+                adapter = import_string(adapter)
+            instance = adapter(request)
+
+        try:
+            request._cart_session = instance
+        except AttributeError:
+            # Some non-standard request doubles disallow attribute assignment;
+            # tolerate the miss — the middleware simply sees no adapter.
+            pass
+        return instance
 
     def _new(self) -> models.Cart:
         cart = models.Cart.objects.create(creation_date=timezone.now())

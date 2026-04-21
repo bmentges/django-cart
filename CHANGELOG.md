@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes._
 
+## [3.0.12] — 2026-04-21
+
+### Added
+- `cart.middleware.CartCookieMiddleware` — new middleware that flushes
+  pending cookie state from the active session adapter onto the
+  outgoing response. Required when `CARTS_SESSION_ADAPTER_CLASS` is
+  set to `CookieSessionAdapter` (or any custom cookie-backed adapter);
+  harmless to leave installed when using `DjangoSessionAdapter`. (#P0-A)
+- `CartSessionAdapter.flush_to_response(request, response)` — new ABC
+  hook. Default implementation is a no-op; `CookieSessionAdapter`
+  overrides it to diff its in-memory cookie state against
+  `request.COOKIES` and call `response.set_cookie` /
+  `delete_cookie` for added, changed, and removed entries.
+
+### Fixed
+- **P0-A** · `CookieSessionAdapter` now actually persists the cart id
+  across requests when wired via `CARTS_SESSION_ADAPTER_CLASS`. Before
+  this release, the adapter constructed by `Cart.__init__` received
+  `request` only, so writes went to an in-memory dict and the browser
+  never saw `Set-Cookie: CART-ID=…` — every request created a new
+  abandoned cart row. `Cart._build_session_adapter` now caches the
+  adapter on `request._cart_session` and `CartCookieMiddleware`
+  flushes pending cookies onto the response.
+
 ## [3.0.11] — 2026-04-21
 
 ### Changed — Licensing
