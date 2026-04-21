@@ -1018,8 +1018,40 @@ reflection) tests.
 
 **Python 3.10+, Django 4.2+.**
 
-The CI matrix exercises the full range up to Python 3.14 and
-Django 6.0.
+### Compatibility matrix
+
+|              | Django 4.2 | Django 5.0 | Django 5.1 | Django 6.0 |
+|--------------|:----------:|:----------:|:----------:|:----------:|
+| Python 3.10  |     ✅     |     ✅     |     ✅     |      —     |
+| Python 3.11  |     ✅     |     ✅     |     ✅     |      —     |
+| Python 3.12  |     ✅     |     ✅     |     ✅     |     ✅     |
+| Python 3.13  |     ✅     |     ✅     |     ✅     |     ✅     |
+| Python 3.14  |     ❌     |     ❌     |     ❌     |     ✅     |
+
+- ✅ exercised in CI.
+- ❌ unsupported — see the callout below.
+- — this Python version is outside the upstream Django release's
+  supported Python range.
+
+> [!warning] **Python 3.14 requires Django 6.0+**
+> `django-cart` does **not** support Python 3.14 paired with Django
+> 4.2, 5.0, or 5.1 — and will not. The incompatibility is upstream in
+> Django itself.
+>
+> **Why it breaks.** Django's `django.template.Context.__copy__`
+> (pre-6.0) assigns `duplicate.dicts = self.dicts[:]` onto a value
+> returned by `copy(super())`, i.e. a `super()` proxy. Python 3.14
+> no longer permits attribute assignment on `super()` proxies, so any
+> template render under Py3.14 + Django<6 raises
+> `AttributeError: 'super' object has no attribute 'dicts' and no
+> __dict__ for setting new attributes`.
+>
+> Django fixed `Context.__copy__` in 6.0. There is nothing
+> `django-cart` can patch on its side — the break is in Django's
+> template engine, not in this library.
+>
+> **What to do.** On Python 3.14, upgrade to Django 6.0+. On earlier
+> Django, stay on Python 3.13 or below.
 
 ---
 
