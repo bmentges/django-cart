@@ -776,21 +776,42 @@ through v2.2.13).
 v3.0.3 (shipped 2026-04-20) → P-1 Phase 0: pytest scaffolding,
                               conftest fixtures, canonical pattern doc.
                               No behaviour change. No API change.
-v3.0.4 (pending — PR #53)   → P-1 Phase 1: migrate test_session.py to
-                              tests/test_session_adapters.py as the
-                              reference pytest example. Delete the
-                              reflection test. No behaviour change.
-v3.0.5 (this PR)            → P-1 Phase 2: migrate test_signals.py,
-                              test_templatetags.py, test_performance.py.
-                              Wall-clock perf assertions replaced with
-                              django_assert_num_queries /
-                              django_assert_max_num_queries bounds
-                              (reproducible across hardware; catches
-                              N+1 regressions that wall clock can mask).
+v3.0.4 (SKIPPED)            → Originally earmarked for P-1 Phase 1
+                              alone, but Phase 1 (PR #53) and Phase 2
+                              (PR #55 — a re-apply of PR #54 after a
+                              stacked-PR mishap) landed on master
+                              within hours of each other with no
+                              intermediate bump commit. Collapsed into
+                              v3.0.5.
+v3.0.5 (shipped 2026-04-20) → P-1 Phase 1 + Phase 2 combined:
+                              - Phase 1: migrate test_session.py to
+                                tests/test_session_adapters.py as the
+                                reference pytest example. Delete the
+                                reflection test.
+                              - Phase 2: migrate test_signals.py,
+                                test_templatetags.py, test_performance.py.
+                                Wall-clock perf assertions replaced with
+                                django_assert_num_queries /
+                                django_assert_max_num_queries bounds
+                                (reproducible across hardware; catches
+                                N+1 regressions that wall clock masks).
                               No behaviour change.
-v3.0.6 (patch)              → P-1 Phase 3: replace test_integration.py
-                              (MagicMock-based) with a real HTTP test
-                              suite via Django's test client.
+v3.0.6 (this PR)            → P-1 Phase 3: replace test_integration.py
+                              (MagicMock-based, misnamed — tested Cart
+                              at unit level with mock requests) with
+                              tests/test_http_integration.py. New file
+                              uses Django's real test client against
+                              minimal JSON-returning views wired into
+                              tests/urls.py and tests/test_app/views.py.
+                              14 HTTP tests covering cart detail /
+                              add / remove / update / checkout,
+                              session persistence across requests,
+                              client isolation, error codes (404/400/
+                              405). Also cleans up a wall-clock perf
+                              assertion that was hiding in the legacy
+                              file (test_performance_with_decimal_precision)
+                              — scope creep from Phase 2 but caught
+                              here. No behaviour change.
 v3.0.7 (patch)              → P-1 Phase 4: migrate test_v300.py; split
                               discounts / tax / shipping / inventory
                               into their own files.
