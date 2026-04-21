@@ -49,6 +49,9 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+      - name: Run tests (custom AUTH_USER_MODEL)
+        run: pytest --ds=tests.settings_custom_user tests/test_cart_custom_user.py
  
   changelog:
     name: CHANGELOG has entry for current version
