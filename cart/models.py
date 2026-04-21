@@ -13,6 +13,8 @@ from django.utils.translation import gettext_lazy as _
 if TYPE_CHECKING:
     from django.db.models import Model
 
+    from cart.cart import Cart as CartFacade
+
 
 class Cart(models.Model):
     creation_date: models.DateTimeField = models.DateTimeField(
@@ -79,11 +81,11 @@ class Item(models.Model):
         on_delete=models.CASCADE,
         related_name="items",
     )
-    quantity: int = models.PositiveIntegerField(
+    quantity = models.PositiveIntegerField(
         verbose_name=_("quantity"),
         validators=[MinValueValidator(1)],
     )
-    unit_price: Decimal = models.DecimalField(
+    unit_price = models.DecimalField(
         max_digits=18,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.00"))],
@@ -91,7 +93,7 @@ class Item(models.Model):
     )
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id: int = models.PositiveIntegerField()
+    object_id = models.PositiveIntegerField()
 
     objects: ItemManager = ItemManager()
 
@@ -114,9 +116,17 @@ class Item(models.Model):
     @property
     def product(self) -> "Model":
         if not hasattr(self, "_product_cache"):
-            self._product_cache = self.content_type.model_class().objects.get(
-                pk=self.object_id
-            )
+            model = self.content_type.model_class()
+            if model is None:
+                raise LookupError(
+                    f"ContentType {self.content_type_id} does not resolve to "
+                    "an installed model — the product class was likely removed "
+                    "from INSTALLED_APPS without a data migration."
+                )
+            # ``_default_manager`` is the type-stable manager hook on every
+            # Django model (``type[Model]`` under django-stubs). A direct
+            # ``.objects`` lookup would type-check only on concrete subclasses.
+            self._product_cache = model._default_manager.get(pk=self.object_id)
         return self._product_cache
 
     @product.setter
@@ -194,11 +204,13 @@ class Discount(models.Model):
     def __str__(self) -> str:
         return f"{self.code} ({self.get_discount_type_display()}: {self.value})"
 
-    def is_valid_for_cart(self, cart: "Cart") -> tuple[bool, str]:
+    def is_valid_for_cart(self, cart: "CartFacade") -> tuple[bool, str]:
         """Check if the discount is valid for the given cart.
 
         Args:
-            cart: The cart to validate against.
+            cart: The :class:`cart.cart.Cart` facade (not the DB row
+                model). We call ``cart.summary()`` on it — that
+                method lives on the facade.
 
         Returns:
             A tuple of (is_valid, message).
@@ -239,7 +251,10 @@ class Discount(models.Model):
         without compat pain.
         """
         super().clean()
-        errors: dict[str, str] = {}
+        # ``dict[str, Any]`` because ``gettext_lazy`` returns ``_StrPromise``,
+        # not ``str``. ``ValidationError`` accepts either at runtime; the
+        # wider annotation keeps mypy happy without losing the i18n hook.
+        errors: dict[str, Any] = {}
 
         if (
             self.discount_type == DiscountType.PERCENT
@@ -263,7 +278,7 @@ class Discount(models.Model):
         if errors:
             raise ValidationError(errors)
 
-    def calculate_discount(self, cart: "Cart") -> Decimal:
+    def calculate_discount(self, cart: "CartFacade") -> Decimal:
         """Calculate the discount amount for the given cart.
 
         The returned amount is always clamped to the cart's subtotal so
@@ -272,7 +287,8 @@ class Discount(models.Model):
         produce a discount larger than what the cart is worth.
 
         Args:
-            cart: The cart to calculate discount for.
+            cart: The :class:`cart.cart.Cart` facade (provides
+                ``summary()`` — a method absent from the bare model row).
 
         Returns:
             The discount amount as a Decimal, never exceeding
