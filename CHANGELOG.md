@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- `tests/test_readme.py` — link-integrity checks for `README.md`.
+  Fails CI if any relative repo path or intra-doc `#anchor` goes dead.
+  External http(s) URLs are skipped (offline-clean).
+
+### Fixed
+- **P1-A** · `Cart.checkout()` is now idempotent across facades. Before
+  this release, a second `Cart(request)` instance on the same cart row
+  (concurrent worker, double-click, retry) would re-enter the
+  discount-increment path because the `checked_out` flag was only
+  checked against its stale in-memory copy. The counter would drift
+  to 2 and `cart_checked_out` would fire twice. Fixed by taking
+  `select_for_update()` on the `Cart` row inside the atomic block and
+  re-reading `checked_out` under the lock.
+
+### Docs
+- README `Checkout` section, the concurrency warning in
+  `Using the Cart`, and the discount-enforcement sequence diagram now
+  reflect the P1-A fix (Cart row is locked, not just the Discount row).
+- Removed two dead links to the unwritten `docs/ROADMAP_2026_04.md`;
+  both references now point at `docs/ANALYSIS.md`.
 
 ## [3.0.12] — 2026-04-21
 

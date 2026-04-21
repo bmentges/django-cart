@@ -248,8 +248,9 @@ invalidate the internal summary cache on success.
 > write `N+q`, clobbering one of the adds. For code paths that must
 > be concurrent-safe, wrap the mutation in your own
 > `select_for_update()` block or serialise upstream (idempotency
-> keys, queue-per-cart, etc.). `checkout()` already uses
-> `select_for_update()` on the `Discount` row — use it as a template.
+> keys, queue-per-cart, etc.). `checkout()` already locks the `Cart`
+> row and (when a discount is applied) the `Discount` row via
+> `select_for_update()` — use it as a template.
 
 ### Bulk operations
 
@@ -367,12 +368,17 @@ except InvalidDiscountError as e:
 - **Atomic.** Marks the cart checked-out and (if a discount is
   applied) increments `Discount.current_uses` in the same
   transaction.
-- **Race-safe at the discount level.** Takes a `SELECT … FOR UPDATE`
-  on the `Discount` row, revalidates, and increments via an `F()`
-  expression. Two concurrent checkouts of the last remaining use
-  result in one success and one `InvalidDiscountError`.
-- **Idempotent.** Calling `checkout()` twice on the same cart is a
-  no-op — no second counter bump, no duplicate signal.
+- **Race-safe.** Takes a `SELECT … FOR UPDATE` on the `Cart` row
+  first, then (when a discount is applied) on the `Discount` row.
+  Two concurrent checkouts of the same cart produce exactly one
+  counter increment; two concurrent checkouts of the last remaining
+  use of a discount code result in one success and one
+  `InvalidDiscountError`.
+- **Idempotent across facades.** Calling `checkout()` twice on the
+  same cart — even from separate `Cart(request)` instances or
+  workers with stale in-memory state — is a no-op on the second
+  call. No second counter bump, no duplicate `cart_checked_out`
+  signal.
 
 > [!note] `checkout()` does not reserve inventory
 > Stock reservation is the consuming project's responsibility. The
@@ -450,17 +456,24 @@ sequenceDiagram
 
     V->>C: checkout()
     C->>DB: BEGIN
-    C->>DB: SELECT ... FROM Discount WHERE pk=? FOR UPDATE
-    C->>C: discount.is_valid_for_cart(self)
+    C->>DB: SELECT ... FROM Cart WHERE pk=? FOR UPDATE
 
-    alt still valid
-        C->>DB: UPDATE Discount SET current_uses = current_uses + 1
-        C->>DB: UPDATE Cart SET checked_out = true
+    alt cart already checked_out<br>(another facade won the race)
         C->>DB: COMMIT
-        C-->>V: ok
-    else no longer valid<br>(expired, deactivated, cap reached)
-        C->>DB: ROLLBACK
-        C-->>V: raises InvalidDiscountError
+        C-->>V: ok (no-op)
+    else proceed
+        C->>DB: SELECT ... FROM Discount WHERE pk=? FOR UPDATE
+        C->>C: discount.is_valid_for_cart(self)
+
+        alt still valid
+            C->>DB: UPDATE Discount SET current_uses = current_uses + 1
+            C->>DB: UPDATE Cart SET checked_out = true
+            C->>DB: COMMIT
+            C-->>V: ok
+        else no longer valid<br>(expired, deactivated, cap reached)
+            C->>DB: ROLLBACK
+            C-->>V: raises InvalidDiscountError
+        end
     end
 ```
 
@@ -1063,12 +1076,11 @@ reflection) tests.
 > `Coin` model) denominated in long decimals with satoshi- or
 > wei-level precision. The cart stays a collection of `(product,
 > quantity, unit_price)` triples; only the numeric precision
-> changes. Design doc required before implementation. Details and
-> candidate shapes in
-> [`docs/ROADMAP_2026_04.md` §P3-10](docs/ROADMAP_2026_04.md).
+> changes. Design doc required before implementation. Broader
+> prioritisation lives in
+> [`docs/ANALYSIS.md`](docs/ANALYSIS.md).
 >
-> *This is a scope marker, not a commitment.* See the roadmap for
-> the authoritative per-release plan.
+> *This is a scope marker, not a commitment.*
 
 ---
 
@@ -1076,7 +1088,9 @@ reflection) tests.
 
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — Keep-a-Changelog
   format.
-- **Roadmap of record:** [`docs/ROADMAP_2026_04.md`](docs/ROADMAP_2026_04.md).
+- **Analysis & remediation plan:** [`docs/ANALYSIS.md`](docs/ANALYSIS.md)
+  — bug-by-bug priorities, design gaps, and the suggested per-release
+  scope.
 - **License:** MIT. See [`LICENSE`](LICENSE). (Relicensed from
   LGPL-3.0 in v3.0.11 — see `CHANGELOG.md`.)
 
