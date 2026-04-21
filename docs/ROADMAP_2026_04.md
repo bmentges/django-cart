@@ -1002,17 +1002,45 @@ v3.0.12 (this PR)           → P0-2 fix: Discount.current_uses now
                               behaviour in a patch" framing. The
                               obsolete validate=True gating plan in
                               the v3.1.0 entry below is now moot.
-v3.0.13 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
+v3.0.13 (this PR)           → P0-3 fix: CARTS_SESSION_ADAPTER_CLASS
+                              is now actually read by Cart.__init__.
+                              Changes:
+                              - Cart.__init__ builds a session adapter
+                                from settings.CARTS_SESSION_ADAPTER_CLASS
+                                (dotted string or class object), default
+                                DjangoSessionAdapter. Cart never touches
+                                request.session directly anymore — all
+                                session I/O goes through the adapter's
+                                get_or_create_cart_id / set_cart_id.
+                              - Bad dotted path raises ImportError
+                                loudly. Session storage is too critical
+                                for the tax/shipping/inventory-style
+                                silent fallback.
+                              - Class-object form honoured too, matching
+                                the README example verbatim.
+                              Not fixed in this PR: the cart_link
+                              template tag still reads request.session
+                              directly (has deeper issues — force-
+                              creates a cart via Cart(request) so its
+                              "no cart" branch is dead). Follow-up.
+                              P0-4 (CookieSessionAdapter cookie round-
+                              trip) remains xfailed — the adapter is
+                              now pluggable, but the cookie adapter's
+                              HTTP round-trip is still broken. Both
+                              land together in 3.0.14.
+v3.0.14 .. v3.0.17 (patch)  → Remaining P0 bug fixes, one per release,
                               each removing an @xfail marker as the
                               fix:
-                              3.0.13 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
                               3.0.14 = P0-4 (CookieSessionAdapter
                                       round-trip)
-                              3.0.15 = P0-5 (README template-tag
-                                      examples — doc-only fix, no
-                                      xfail to remove)
+                              3.0.15 = SKIPPED — P0-5 (README template-
+                                      tag examples) rolls into the full
+                                      README rewrite at the tail of the
+                                      sequence, not released separately.
                               3.0.16 = P0-6 (CHANGELOG backfill)
                               3.0.17 = P0-7 (docs stale-banner)
+                              (final) = README full rewrite — supersedes
+                                       P0-5.
 v3.1.0 (minor)              → P1 block + P2-1, P2-2, P2-3, P2-9.
                               Cart.checkout() grows a validate kwarg.
                               Default is None → DeprecationWarning +
