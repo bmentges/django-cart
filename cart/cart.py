@@ -821,12 +821,21 @@ class Cart:
         """
         Return the discount amount for the applied discount.
 
+        Result is cached on the Cart instance and invalidated by the next
+        mutation. Useful when :meth:`total` and a "you saved $X" display
+        both read it in the same render.
+
         Returns:
             Decimal: The discount amount, or Decimal("0.00") if no discount applied.
         """
+        if "discount_amount" in self._cache:
+            return self._cache["discount_amount"]
         if self.cart.discount is None:
-            return Decimal("0.00")
-        return self.cart.discount.calculate_discount(self)
+            amount = Decimal("0.00")
+        else:
+            amount = self.cart.discount.calculate_discount(self)
+        self._cache["discount_amount"] = amount
+        return amount
 
     def discount_code(self) -> str | None:
         """
@@ -893,6 +902,11 @@ class Cart:
         """
         Calculate tax for the cart using the configured TaxCalculator.
 
+        Result is cached on the Cart instance and invalidated by the
+        next mutation. Tax calculators can hit external APIs (Stripe
+        Tax, Avalara, TaxJar) — a template that renders tax alongside
+        total would otherwise pay for two remote calls.
+
         Returns:
             Decimal: The calculated tax amount.
 
@@ -900,14 +914,21 @@ class Cart:
 
             tax_amount = cart.tax()
         """
+        if "tax" in self._cache:
+            return self._cache["tax"]
         from .tax import get_tax_calculator
 
         calculator = get_tax_calculator()
-        return calculator.calculate(self)
+        amount = calculator.calculate(self)
+        self._cache["tax"] = amount
+        return amount
 
     def shipping(self) -> Decimal:
         """
         Calculate shipping cost for the cart using the configured ShippingCalculator.
+
+        Result is cached on the Cart instance and invalidated by the
+        next mutation. See :meth:`tax` for the motivating use case.
 
         Returns:
             Decimal: The calculated shipping cost.
@@ -916,10 +937,14 @@ class Cart:
 
             shipping_cost = cart.shipping()
         """
+        if "shipping" in self._cache:
+            return self._cache["shipping"]
         from .shipping import get_shipping_calculator
 
         calculator = get_shipping_calculator()
-        return calculator.calculate(self)
+        amount = calculator.calculate(self)
+        self._cache["shipping"] = amount
+        return amount
 
     def shipping_options(self) -> "list[ShippingOption]":
         """
@@ -972,13 +997,18 @@ class Cart:
         """
         Calculate the total cart value including discounts, tax, and shipping.
 
-        The returned value is always quantized to two decimal places
-        with ``ROUND_HALF_UP``. Aggregating ``subtotal``, ``discount``,
-        ``tax``, and ``shipping`` can produce long-tail digits when any
-        of them is a computed rate (e.g. a compound tax), and leaking
-        that noise into display or downstream storage surprises
-        consumers who assume 2dp. Rounding at the boundary keeps every
-        caller on the same footing.
+        Result is cached on the Cart instance and invalidated by the
+        next mutation. The four inputs (:meth:`summary`,
+        :meth:`discount_amount`, :meth:`tax`, :meth:`shipping`) are
+        each cached too, so the first call to ``total()`` runs each
+        calculator exactly once and subsequent calls return the cached
+        Decimal without touching Python's arithmetic at all.
+
+        Quantized to two decimal places with ``ROUND_HALF_UP``.
+        Aggregating ``subtotal − discount + tax + shipping`` can
+        produce long-tail digits when any of them is a computed rate
+        (e.g. a compound tax), and leaking that noise into display or
+        downstream storage surprises consumers who assume 2dp.
 
         Returns:
             Decimal: The final total amount, quantized to 2dp, never
@@ -988,6 +1018,8 @@ class Cart:
 
             total = cart.total()  # summary - discount + tax + shipping
         """
+        if "total" in self._cache:
+            return self._cache["total"]
         subtotal = self.summary()
         discount = self.discount_amount()
         tax = self.tax()
@@ -995,4 +1027,6 @@ class Cart:
 
         total = subtotal - discount + tax + shipping
         total = max(total, Decimal("0.00"))
-        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        self._cache["total"] = total
+        return total

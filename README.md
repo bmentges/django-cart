@@ -304,10 +304,11 @@ cart.discount_amount()    # Decimal — 0.00 if no discount applied
 cart.total()              # Decimal — summary − discount + tax + shipping
 ```
 
-`summary()` and `count()` are cached on the `Cart` instance and
-invalidated on every mutation. `tax()` / `shipping()` call out to
-the configured calculators on each call — if they are expensive,
-memoise on the calculator side.
+All six methods above — `summary()`, `count()`, `tax()`, `shipping()`,
+`discount_amount()`, `total()` — are cached on the `Cart` instance
+and invalidated on every mutation. A template that renders subtotal
++ tax + shipping + discount + total calls each configured calculator
+exactly once per request, not once per displayed field.
 
 ### User binding and merging
 
