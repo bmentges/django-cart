@@ -70,6 +70,22 @@ def test_custom_inventory_checker_subclass_is_usable_inline():
     assert checker.check(MagicMock(), 10) is False
 
 
+def test_default_inventory_checker_reserve_returns_true():
+    """Covers cart/inventory.py — DefaultInventoryChecker.reserve."""
+    assert DefaultInventoryChecker().reserve(MagicMock(), 1) is True
+
+
+@pytest.mark.django_db
+def test_get_inventory_checker_falls_back_to_default_when_class_path_is_bad(settings):
+    """Covers cart/inventory.py:158-159 — ImportError/AttributeError
+    fallback. P1-4 adds a warning log around this."""
+    settings.CART_INVENTORY_CHECKER = "nonexistent.module.FakeChecker"
+
+    checker = get_inventory_checker()
+
+    assert isinstance(checker, DefaultInventoryChecker)
+
+
 # --------------------------------------------------------------------------- #
 # Cart.add integration (check_inventory parameter)
 # --------------------------------------------------------------------------- #

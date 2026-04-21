@@ -55,3 +55,37 @@ def test_add_bulk_respects_max(cart, product_factory, settings):
         cart.add_bulk([
             {"product": product_factory(name="BulkMax"), "unit_price": Decimal("10.00"), "quantity": 10},
         ])
+
+
+# --------------------------------------------------------------------------- #
+# Merge caps combined quantity at max (unlike add, which raises, merge
+# silently clamps — the two paths are reached by cart/cart.py:373 and 381).
+# --------------------------------------------------------------------------- #
+
+def test_merge_caps_combined_quantity_when_both_carts_contain_the_same_product(
+    cart, other_cart, product, settings
+):
+    """cart/cart.py:373 — existing item path."""
+    settings.CART_MAX_QUANTITY_PER_ITEM = 10
+    cart.add(product, Decimal("10.00"), quantity=6)
+    other_cart.add(product, Decimal("10.00"), quantity=6)
+
+    cart.merge(other_cart, strategy="add")
+
+    assert cart.cart.items.first().quantity == 10
+
+
+def test_merge_caps_new_item_quantity_when_source_cart_overshoots(
+    cart, other_cart, product, settings
+):
+    """cart/cart.py:381 — new-item path (product not already in target).
+
+    Populate the source cart first (without the cap), then apply the cap
+    before merging. Otherwise the cap would block the setup-stage add.
+    """
+    other_cart.add(product, Decimal("10.00"), quantity=20)
+    settings.CART_MAX_QUANTITY_PER_ITEM = 5
+
+    cart.merge(other_cart, strategy="add")
+
+    assert cart.cart.items.first().quantity == 5

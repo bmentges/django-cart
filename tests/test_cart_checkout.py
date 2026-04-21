@@ -41,6 +41,19 @@ def test_can_checkout_rejects_cart_below_min_order_amount_setting(cart, product,
     assert "500.00" in message
 
 
+def test_can_checkout_accepts_cart_at_or_above_min_order_amount(cart, product, settings):
+    """Covers the `min_amount is not None AND summary >= min_amount`
+    branch in can_checkout — previously unreachable through the suite
+    (only the below-minimum path was exercised)."""
+    settings.CART_MIN_ORDER_AMOUNT = Decimal("100.00")
+    cart.add(product, unit_price=Decimal("100.00"), quantity=2)
+
+    can_checkout, message = cart.can_checkout()
+
+    assert can_checkout is True
+    assert message == ""
+
+
 # --------------------------------------------------------------------------- #
 # checkout() — marks the DB record
 # --------------------------------------------------------------------------- #

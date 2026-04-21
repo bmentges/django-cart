@@ -121,3 +121,53 @@ def test_cart_link_falls_back_to_root_when_context_has_no_request(context_withou
     result = cart_link(context_without_request)
 
     assert '<a href="/cart/">View Cart</a>' in result
+
+
+# --------------------------------------------------------------------------- #
+# End-to-end template rendering — the tags must work through Django's real
+# template engine, not just as Python callables.
+#
+# Related to P0-5: the README currently shows the tags invoked with a
+# positional ``request`` argument (`{% cart_item_count request %}`), which
+# doesn't match the ``takes_context=True`` implementation. That bug is a
+# docs-only fix (the README text gets corrected in v3.0.16); there is no
+# behavioural regression to @xfail. These tests instead lock in the
+# CORRECT tag-invocation syntax so a future README update has a test to
+# sanity-check against, and verify the templates render under Django's
+# full loader/parser/renderer.
+# --------------------------------------------------------------------------- #
+
+from django.template import Template  # noqa: E402 — logically belongs with the block below
+
+
+def test_cart_item_count_renders_through_template_engine(db, rf_request):
+    tpl = Template("{% load cart_tags %}{% cart_item_count %}")
+
+    result = tpl.render(Context({"request": rf_request}))
+
+    assert result == "0"
+
+
+def test_cart_summary_renders_through_template_engine(db, rf_request):
+    tpl = Template("{% load cart_tags %}{% cart_summary %}")
+
+    result = tpl.render(Context({"request": rf_request}))
+
+    assert result == "$0.00"
+
+
+def test_cart_is_empty_renders_through_template_engine(db, rf_request):
+    tpl = Template("{% load cart_tags %}{% cart_is_empty %}")
+
+    result = tpl.render(Context({"request": rf_request}))
+
+    assert result == "True"
+
+
+def test_cart_link_renders_through_template_engine(db, rf_request):
+    tpl = Template('{% load cart_tags %}{% cart_link "My Cart" "btn btn-primary" %}')
+
+    result = tpl.render(Context({"request": rf_request}))
+
+    assert 'class="btn btn-primary"' in result
+    assert '>My Cart</a>' in result

@@ -287,8 +287,18 @@ The suite is partway through the overhaul described in `docs/ROADMAP_2026_04.md`
   replacement for the legacy config-reflection classes),
   `test_cart_atomic.py`, `test_clean_carts_command.py`. The two
   shadowed tests from the duplicate `CartIterationTest` class are
-  recovered (P1-5 dissolves). Targets v3.0.8.
-- ⏭ Phase 6: reflection-only tests deleted.
+  recovered (P1-5 dissolves). Shipped in v3.0.8.
+- ✅ Phases 6+7 (combined): behavioural coverage audit + remaining
+  reflection sweep. Four `@pytest.mark.xfail(strict=True)` regression
+  tests added for known P0 bugs (P0-1 `from_serializable`, P0-2
+  `Discount.current_uses`, P0-3 `CARTS_SESSION_ADAPTER_CLASS`, P0-4
+  `CookieSessionAdapter` round-trip). Coverage fills added for
+  merge max-quantity cap paths, `add_bulk` rollback on invalid-quantity,
+  misconfigured calculator/checker fallbacks, `can_checkout` minimum-
+  met branch. Positive template-render tests via Django's template
+  engine for the four cart template tags (doc-fix for P0-5 needs no
+  xfail — behaviour is correct today). Coverage: 95% → 98%. Targets
+  v3.0.9.
 - ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 7: behavioural coverage audit, P0 regression `xfail` tests.
 - ⏭ Phase 8: `runtests.py` deleted, CI flipped to pytest-only, coverage

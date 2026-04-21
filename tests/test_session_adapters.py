@@ -148,3 +148,70 @@ def test_cookie_get_or_create_cart_id_returns_none_for_non_integer(
     cookie_adapter.cookies["CART-ID"] = bad_value
 
     assert cookie_adapter.get_or_create_cart_id() is None
+
+
+def test_cookie_set_cart_id_serialises_int_as_string(cookie_adapter):
+    """set_cart_id coerces to str so the cookie value is HTTP-transport-safe.
+    Covers cart/session.py lines 107-108 — previously dead since no test
+    called set_cart_id on the cookie adapter."""
+    cookie_adapter.set_cart_id(42)
+
+    assert cookie_adapter.cookies["CART-ID"] == "42"
+    cookie_adapter.response.set_cookie.assert_called_once_with("CART-ID", "42")
+
+
+def test_cookie_adapter_without_response_stores_in_memory_only():
+    """Without a response, set/delete still mutate the in-memory dict but
+    skip the response.set_cookie / response.delete_cookie side effects.
+    Covers the ``if self._response is not None`` branches."""
+    adapter = CookieSessionAdapter()
+
+    adapter.set("key", "value")
+    assert adapter._cookies["key"] == "value"
+
+    adapter.delete("key")
+    assert "key" not in adapter._cookies
+
+
+def test_cookie_adapter_delete_on_missing_key_is_noop():
+    """Covers the ``if key in self._cookies`` branch of delete()."""
+    adapter = CookieSessionAdapter()
+
+    adapter.delete("never-set")  # must not raise
+
+    assert "never-set" not in adapter._cookies
+
+
+# --------------------------------------------------------------------------- #
+# P0 regression — @xfail until the fix lands
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "P0-4 — CookieSessionAdapter.__init__ never populates self._cookies "
+        "from request.COOKIES, so a cart id set on one request is not "
+        "recoverable on the next. The in-memory round-trip works (previous "
+        "tests); the HTTP round-trip does not. Scheduled for v3.0.14 "
+        "(see docs/ROADMAP_2026_04.md §P0-4)."
+    ),
+)
+def test_cookie_session_adapter_round_trips_via_real_request_cookies():
+    """Two sequential requests sharing a cookie jar should see the same
+    cart id — the canonical cookie-session-adapter contract."""
+    from django.http import HttpResponse
+    from django.test import RequestFactory
+
+    # Request 1: adapter writes cart id to the response's Set-Cookie.
+    response = HttpResponse()
+    writer = CookieSessionAdapter(response=response)
+    writer.set_cart_id(42)
+
+    cart_id_cookie = response.cookies["CART-ID"].value
+
+    # Request 2: browser echoes the cookie back; Django populates
+    # request.COOKIES from it. The adapter must hydrate from that.
+    request = RequestFactory().get("/", COOKIES={"CART-ID": cart_id_cookie})
+    reader = CookieSessionAdapter(request=request)
+
+    assert reader.get_or_create_cart_id() == 42

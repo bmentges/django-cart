@@ -108,3 +108,45 @@ def test_applying_discount_invalidates_cart_cache(cart_worth_200):
     cart_worth_200.apply_discount("CACHE_TEST")
 
     assert cart_worth_200.discount_amount() == Decimal("20.00")
+
+
+# --------------------------------------------------------------------------- #
+# Discount.increment_usage — direct coverage of the model method
+# --------------------------------------------------------------------------- #
+
+def test_discount_increment_usage_increments_the_counter(discount_percent):
+    """The method exists on Discount but is never called from Cart today
+    (P0-2). Tested directly so the model-level behaviour is covered
+    regardless of whether the Cart integration lands."""
+    starting = discount_percent.current_uses
+
+    discount_percent.increment_usage()
+
+    discount_percent.refresh_from_db()
+    assert discount_percent.current_uses == starting + 1
+
+
+# --------------------------------------------------------------------------- #
+# P0 regression — @xfail until the fix lands
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "P0-2 — Discount.current_uses is never incremented automatically. "
+        "apply_discount() + checkout() leaves the counter at 0 regardless "
+        "of max_uses, so usage limits are not enforced in practice. "
+        "Scheduled for v3.0.12 (see docs/ROADMAP_2026_04.md §P0-2)."
+    ),
+)
+def test_apply_discount_then_checkout_increments_current_uses(
+    cart_worth_200, discount_percent
+):
+    """After applying a discount and checking out, the discount's
+    current_uses should be 1. Today it stays 0."""
+    cart_worth_200.apply_discount("PERCENT20")
+
+    cart_worth_200.checkout()
+
+    discount_percent.refresh_from_db()
+    assert discount_percent.current_uses == 1
