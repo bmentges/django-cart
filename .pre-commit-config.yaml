@@ -8,7 +8,7 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.3.1
     hooks:
       - id: black
   - repo: https://github.com/pycqa/isort
