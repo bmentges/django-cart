@@ -1,20 +1,39 @@
 from decimal import ROUND_HALF_UP, Decimal
+from typing import TYPE_CHECKING, Optional
 
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F, QuerySet, Sum
+from django.dispatch import Signal
 from django.utils import timezone
 
 from . import models
 
+if TYPE_CHECKING:
+    from .shipping import ShippingOption
+
+# ``cart.signals`` is imported defensively: the module is optional (a
+# downstream can remove it) and these five Signal handles are typed as
+# ``Optional[Signal]`` so the ``is not None`` guards at each emit site
+# read cleanly under mypy.
+cart_item_added: Optional[Signal]
+cart_item_removed: Optional[Signal]
+cart_item_updated: Optional[Signal]
+cart_checked_out: Optional[Signal]
+cart_cleared: Optional[Signal]
+
 try:
-    from .signals import (
-        cart_checked_out,
-        cart_cleared,
-        cart_item_added,
-        cart_item_removed,
-        cart_item_updated,
-    )
+    from .signals import cart_checked_out as _cart_checked_out
+    from .signals import cart_cleared as _cart_cleared
+    from .signals import cart_item_added as _cart_item_added
+    from .signals import cart_item_removed as _cart_item_removed
+    from .signals import cart_item_updated as _cart_item_updated
+
+    cart_item_added = _cart_item_added
+    cart_item_removed = _cart_item_removed
+    cart_item_updated = _cart_item_updated
+    cart_checked_out = _cart_checked_out
+    cart_cleared = _cart_cleared
 except ImportError:
     cart_item_added = None
     cart_item_removed = None
@@ -92,14 +111,14 @@ def _parse_serializable_key(key: str, item_data: dict) -> tuple[int, int]:
             "'<content_type_id>:<object_id>' or an integer object_id."
         ) from exc
 
-    content_type_id = item_data.get("content_type_id")
-    if content_type_id is None:
+    content_type_id_raw = item_data.get("content_type_id")
+    if content_type_id_raw is None:
         raise ValueError(
             f"Cannot restore item key={key!r}: payload is missing "
             "'content_type_id'. Pre-v3.0.11 serialised payloads lack "
             "this field and cannot be restored without it."
         )
-    return int(content_type_id), object_id
+    return int(content_type_id_raw), object_id
 
 
 class Cart:
@@ -180,7 +199,12 @@ class Cart:
         return cart
 
     def _get_item(self, product) -> models.Item | None:
-        return models.Item.objects.filter(cart=self.cart, product=product).first()
+        # ``product=`` is rewritten to ``content_type + object_id`` by
+        # ``ItemManager._inject_content_type``. django-stubs doesn't
+        # follow that translation, so the kwarg looks unresolved here.
+        return models.Item.objects.filter(
+            cart=self.cart, product=product  # type: ignore[misc]
+        ).first()
 
     def _invalidate_cache(self) -> None:
         """Invalidate the summary and count cache."""
@@ -297,9 +321,11 @@ class Cart:
                     raise InvalidQuantity(f"Quantity cannot exceed {max_qty}.")
                 item.save(update_fields=["unit_price", "quantity"])
             else:
+                # ``product=`` is rewritten by ItemManager._inject_content_type —
+                # django-stubs can't follow the translation.
                 item = models.Item.objects.create(
                     cart=self.cart,
-                    product=product,
+                    product=product,  # type: ignore[misc]
                     unit_price=unit_price,
                     quantity=int(quantity),
                 )
@@ -641,9 +667,11 @@ class Cart:
                     if max_qty is not None and new_quantity > max_qty:
                         new_quantity = max_qty
 
+                    # ``product=`` goes through ItemManager._inject_content_type —
+                    # django-stubs can't follow the kwarg translation.
                     models.Item.objects.create(
                         cart=self.cart,
-                        product=other_item.product,
+                        product=other_item.product,  # type: ignore[misc]
                         unit_price=other_item.unit_price,
                         quantity=new_quantity,
                     )
@@ -731,9 +759,11 @@ class Cart:
                     item.quantity = quantity
                     item.save(update_fields=["unit_price", "quantity"])
                 else:
+                    # ``product=`` goes through ItemManager._inject_content_type —
+                    # django-stubs can't follow the kwarg translation.
                     item = models.Item.objects.create(
                         cart=self.cart,
-                        product=product,
+                        product=product,  # type: ignore[misc]
                         unit_price=unit_price,
                         quantity=quantity,
                     )
@@ -846,12 +876,13 @@ class Cart:
         calculator = get_shipping_calculator()
         return calculator.calculate(self)
 
-    def shipping_options(self) -> list[dict]:
+    def shipping_options(self) -> "list[ShippingOption]":
         """
         Get available shipping options using the configured ShippingCalculator.
 
         Returns:
-            list[dict]: List of shipping options with id, name, and price.
+            list[ShippingOption]: Each option carries ``id``, ``name``,
+            and ``price`` keys.
 
         Example::
 

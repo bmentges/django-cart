@@ -24,18 +24,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inline in the Actions log.
 - Dependabot now covers the `pre-commit` ecosystem (weekly). Hook
   revs stay current without manual bump PRs.
+- **mypy** is back in pre-commit (and therefore in the CI `Lint`
+  job), this time with `django-stubs[compatible-mypy]` so the Django
+  ORM actually type-checks. Scope is `cart/` only — `tests/` is
+  deliberately excluded (signal-light for type-check cost). Runs on
+  one cell (Py3.12 × Django 5.1) via the hook's
+  `additional_dependencies` pin; django-stubs is tied to specific
+  Django minors and the type-check signal barely varies across the
+  rest of the matrix, so one cell is the industry-standard tradeoff.
+  Starting configuration is `strict = false` with
+  `check_untyped_defs = true` — a pragmatic starting point that
+  catches real bugs without forcing a whole-codebase annotation
+  sweep. Follow-ups can ratchet strictness per module.
 
 ### Changed
 - Pre-commit hook versions refreshed (`pre-commit-hooks` v4.5.0 →
   v5.0.0 adds `check-yaml` / `check-toml` / `check-merge-conflict`;
   `black` 24.1.0 → 24.10.0; `isort` 5.13.0 → 5.13.2 with
   `--profile=black`; `flake8` 7.0.0 → 7.1.1 with `max-line-length=100`
-  and `E203`/`W503`/`E501` ignored for black-compat). `mypy` is
-  dropped from the pre-commit config — a proper typing pass needs
-  `django-stubs` and deserves its own scope.
+  and `E203`/`W503`/`E501` ignored for black-compat).
 - One-off format pass across the codebase (trailing whitespace, EOL
   newlines, black reflow on ~4 files, isort re-ordering on ~30 test
   files, 5 legitimate unused imports dropped). Behaviour unchanged.
+- Surgical typing fixes in `cart/` to reach mypy-green:
+  `Item.product` now guards against `ContentType.model_class()`
+  returning `None` (stale-ContentType scenario); `Discount.is_valid_for_cart`
+  and `Discount.calculate_discount` annotate their parameter as the
+  `cart.cart.Cart` facade (the bare model row doesn't have
+  `.summary()`); `cart_admin` uses `@admin.display(description=…)`
+  instead of the legacy `.short_description` attribute pattern;
+  the five optional signal handles are typed `Optional[Signal]`;
+  three `# type: ignore[misc]` suppressions on `product=` kwarg
+  uses (dynamically translated by
+  `ItemManager._inject_content_type`, invisible to django-stubs).
 
 ### Docs
 - README "Iteration and introspection" section adds a callout

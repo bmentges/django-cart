@@ -21,6 +21,7 @@ dev = [
     "pytest>=8",
     "pytest-django>=4.8",
     "coverage[toml]>=7",
+    "django-stubs[compatible-mypy]>=5.1",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -82,3 +83,39 @@ fail_under = 90
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+# --------------------------------------------------------------------------- #
+# mypy configuration
+# --------------------------------------------------------------------------- #
+# Type-checking scope:
+# - ``cart/`` is the typed surface (the public API).
+# - ``tests/`` is deliberately excluded — test code is signal-light for
+#   type-check cost (lots of assertions and dynamic fixtures). A follow-up
+#   PR can opt in if the value becomes clear.
+# - Runs on a single cell (Py3.12 × Django 5.1) via pre-commit's
+#   additional_dependencies pin. django-stubs is tied to specific Django
+#   minors and the type-check signal barely varies across the rest of the
+#   test matrix, so one cell is the industry-standard tradeoff.
+# - ``strict = false`` at first — a pragmatic starting point. Individual
+#   tightenings (strict_equality, warn_unused_ignores) ratchet in
+#   follow-ups. ``check_untyped_defs = true`` is the one strict-adjacent
+#   setting that catches real bugs cheaply.
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main"]
+strict = false
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_reexport = false
+exclude = [
+    "^tests/",
+    "^build/",
+    "^dist/",
+    "^.venv/",
+    "^.*/migrations/.*",
+]
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
