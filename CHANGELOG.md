@@ -54,6 +54,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolves the target via `reverse(CART_DETAIL_URL_NAME)` when the
   new setting is configured, falling back to a static `/cart/`
   otherwise or on `NoReverseMatch`.
+- **P1-D** · `cart_serializable()` / `from_serializable()` no longer
+  collide on `object_id` across different content types. Before this
+  release, two products with the same PK from different product
+  models collapsed to a single entry on serialize (dict-key collision
+  on `str(object_id)`) and updated the wrong item on restore (filter
+  on `object_id` alone). Keys are now
+  `"<content_type_id>:<object_id>"` composites, values include an
+  explicit `object_id` field, and `from_serializable()` looks items
+  up by both columns. Back-compat: legacy plain-`object_id` keys
+  still restore as long as each value carries `content_type_id`
+  (the v3.0.11 contract).
 
 ### Docs
 - README `Checkout` section, the concurrency warning in
@@ -62,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README Template Tags section adds a callout that the tags are
   row-side-effect-free plus a `CART_DETAIL_URL_NAME` example, and the
   Settings Reference table lists the new setting.
+- README Serialisation section documents the new composite-key
+  payload format + the v3.0.11 → v3.0.13 back-compat contract.
 - Removed two dead links to the unwritten `docs/ROADMAP_2026_04.md`;
   both references now point at `docs/ANALYSIS.md`.
 

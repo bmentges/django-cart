@@ -70,7 +70,7 @@ def test_cart_persists_across_sequential_requests_via_cookie(
 
     payload = json.loads(response.content)
     assert payload["count"] == 3
-    assert str(product.pk) in payload["items"]
+    assert any(v["object_id"] == product.pk for v in payload["items"].values())
     # Still exactly one cart row — no abandoned duplicates.
     assert CartModel.objects.count() == 1
 

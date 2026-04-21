@@ -55,7 +55,7 @@ def test_post_cart_add_puts_item_in_cart(client, product):
     payload = _json(response)
     assert payload["count"] == 2
     assert Decimal(payload["summary"]) == Decimal("20.00")
-    assert str(product.pk) in payload["items"]
+    assert any(v["object_id"] == product.pk for v in payload["items"].values())
 
 
 def test_post_cart_remove_empties_the_cart(client, product):
@@ -99,7 +99,7 @@ def test_cart_persists_across_sequential_requests(client, product):
 
     payload = _json(response)
     assert payload["count"] == 3
-    assert str(product.pk) in payload["items"]
+    assert any(v["object_id"] == product.pk for v in payload["items"].values())
 
 
 def test_different_clients_have_isolated_carts(db, product):
