@@ -16,7 +16,6 @@ and arrives with that fix.
 from __future__ import annotations
 
 import json
-import logging
 from decimal import Decimal
 
 import pytest
@@ -138,18 +137,7 @@ def test_session_stores_cart_id_after_first_visit(client):
 # --------------------------------------------------------------------------- #
 
 def test_cart_add_for_unknown_product_returns_404(db, client):
-    # Workaround for Django <6.0 + Python 3.14: Django's Context.__copy__
-    # does `duplicate.dicts = self.dicts[:]` on a super() proxy, which
-    # Py3.14 forbids (AttributeError). The copy is triggered by the test
-    # client's store_rendered_templates handler when Django renders the
-    # 404-logging traceback template via AdminEmailHandler. Disabling
-    # logging short-circuits that render entirely. Not a django-cart bug;
-    # Django fixed Context.__copy__ between 5.1 and 6.0.
-    logging.disable(logging.CRITICAL)
-    try:
-        response = client.post("/cart/add/99999/", {"quantity": 1})
-    finally:
-        logging.disable(logging.NOTSET)
+    response = client.post("/cart/add/99999/", {"quantity": 1})
 
     assert response.status_code == 404
 
