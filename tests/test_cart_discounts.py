@@ -126,19 +126,6 @@ def test_discount_increment_usage_increments_the_counter(discount_percent):
     assert discount_percent.current_uses == starting + 1
 
 
-# --------------------------------------------------------------------------- #
-# P0 regression — @xfail until the fix lands
-# --------------------------------------------------------------------------- #
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "P0-2 — Discount.current_uses is never incremented automatically. "
-        "apply_discount() + checkout() leaves the counter at 0 regardless "
-        "of max_uses, so usage limits are not enforced in practice. "
-        "Scheduled for v3.0.12 (see docs/ROADMAP_2026_04.md §P0-2)."
-    ),
-)
 def test_apply_discount_then_checkout_increments_current_uses(
     cart_worth_200, discount_percent
 ):
