@@ -765,54 +765,90 @@ be a third-party package — doesn't have to live here.
 
 ## Release sequencing
 
+**Revised 2026-04-20 after v3.0.3 release.** The maintainer's cadence is
+one patch release per merged PR, not one per cohesive milestone. Phase 0
+shipped as v3.0.3; remaining phases each get their own patch release.
+Bug fixes (the original "3.0.4") get pushed out and the version numbers
+inflate, but this matches the project's historical rhythm (see v2.2.6
+through v2.2.13).
+
 ```
-3.0.3 (patch)  → P-1 test overhaul. No behaviour change. No API change.
-                 Ships when Phase 8 exits: pytest-only runner, 100%
-                 meaningful coverage, zero TestCase subclasses, README
-                 testing section rewritten. The three known P0 bugs are
-                 NOT fixed in this release — their failing regression
-                 tests land in Phase 7 as @xfail markers pointing at
-                 3.0.4.
-3.0.4 (patch)  → P0-1 through P0-7. Each P0 fix lands as: remove @xfail
-                 from the Phase-7 test, implement the fix, test goes
-                 green. P0-2 increments Discount.current_uses on
-                 checkout (decided 2026-04-20) but stays gated behind
-                 the validate=True branch added in 3.1.0 — so in 3.0.4
-                 it only fires for callers that explicitly opt in via
-                 the codepath, which doesn't exist yet. Net: 3.0.4
-                 fixes from_serializable, session adapter wiring, cookie
-                 round-trip, README template tags, CHANGELOG backfill,
-                 stale-doc banners. The discount counter stays at 0 for
-                 default callers until 4.0.0 flips the validate default.
-                 [Alternative: unconditional increment on every checkout
-                 in 3.0.4. Cleaner behaviour, arguably a behaviour
-                 change rather than a pure bugfix. Maintainer call —
-                 default plan is gated above.]
-3.1.0 (minor)  → P1 block + P2-1, P2-2, P2-3, P2-9.
-                 Cart.checkout() grows a `validate` kwarg (see P1-2).
-                 Default is `None` → emits DeprecationWarning + legacy
-                 behaviour. NOT a breaking change: no existing caller
-                 sees behaviour differences, only a warning they can
-                 silence by passing validate=True or validate=False.
-                 P0-2's discount increment fires inside the
-                 validate=True branch, so it only takes effect for
-                 callers that opt in.
-3.2.0 (minor)  → P2-4 through P2-8, P2-10. Polish, tooling, docs. Keep
-                 the DeprecationWarning noisy; do not silence.
-4.0.0 (major)  → Flip validate default to True (P1-2 Phase 2). Discount
-                 increment now fires by default for every checkout.
-                 Empty-cart / below-min / stock-short checkouts raise.
-                 Drop `default_app_config`. Drop Python 3.10.
-                 P3 selections (pick async + abandoned-cart API at most
-                 to keep scope tight).
+v3.0.3 (shipped 2026-04-20) → P-1 Phase 0: pytest scaffolding,
+                              conftest fixtures, canonical pattern doc.
+                              No behaviour change. No API change.
+v3.0.4 (this PR)            → P-1 Phase 1: migrate test_session.py to
+                              tests/test_session_adapters.py as the
+                              reference pytest example. Delete the
+                              reflection test. No behaviour change.
+v3.0.5 (patch)              → P-1 Phase 2: migrate test_signals.py,
+                              test_templatetags.py, test_performance.py
+                              (the last dropping wall-clock assertions
+                              for django_assert_num_queries).
+v3.0.6 (patch)              → P-1 Phase 3: replace test_integration.py
+                              (MagicMock-based) with a real HTTP test
+                              suite via Django's test client.
+v3.0.7 (patch)              → P-1 Phase 4: migrate test_v300.py; split
+                              discounts / tax / shipping / inventory
+                              into their own files.
+v3.0.8 (patch)              → P-1 Phase 5: migrate test_cart.py (~2200
+                              lines, 177 tests). May land as a series
+                              of PRs per split file, each green, under
+                              the 3.0.8 umbrella tag.
+v3.0.9 (patch)              → P-1 Phase 6: deletion pass — remove all
+                              reflection-only tests per the explicit
+                              list in §P-1.
+v3.0.10 (patch)             → P-1 Phase 7: behavioural coverage audit;
+                              author @pytest.mark.xfail(strict=True)
+                              regression tests for each known P0 bug.
+v3.0.11 (patch)             → P-1 Phase 8: unify test runner, delete
+                              runtests.py, tighten pytest config
+                              (python_classes=[], filterwarnings=error),
+                              enable coverage --fail-under=100 in CI.
+                              P-1 complete.
+v3.0.12 .. v3.0.18 (patch)  → P0 bug fixes, one per release, each
+                              removing an @xfail marker as the fix:
+                              3.0.12 = P0-1 (from_serializable)
+                              3.0.13 = P0-2 (discount current_uses —
+                                      gated, see note below)
+                              3.0.14 = P0-3 (CARTS_SESSION_ADAPTER_CLASS)
+                              3.0.15 = P0-4 (CookieSessionAdapter
+                                      round-trip)
+                              3.0.16 = P0-5 (README template-tag fix)
+                              3.0.17 = P0-6 (CHANGELOG backfill)
+                              3.0.18 = P0-7 (docs stale-banner)
+v3.1.0 (minor)              → P1 block + P2-1, P2-2, P2-3, P2-9.
+                              Cart.checkout() grows a validate kwarg.
+                              Default is None → DeprecationWarning +
+                              legacy behaviour. P0-2's discount
+                              increment fires inside validate=True.
+v3.1.x (patches)            → P2 polish and tooling — pre-commit in CI,
+                              mypy/ruff config, Discount admin, etc.
+                              One per change, per project convention.
+v4.0.0 (major)              → Flip validate default to True. Discount
+                              increment fires by default. Empty-cart /
+                              below-min / stock-short checkouts raise.
+                              Drop default_app_config. Drop Python 3.10.
+                              Earliest October 2026 (needs one full
+                              minor release cycle with the warning
+                              visible in the wild).
 ```
 
-Target cadence: 3.0.3 (test overhaul) by mid-May 2026 — 5–10 focused
-days but sequential, not calendar-concurrent with other work; 3.0.4
-(bug fixes) end of May 2026; 3.1.0 end of June 2026; 3.2.0 end of
-August 2026; 4.0.0 no sooner than October 2026 (needs at least one full
-minor-release cycle with the DeprecationWarning visible in the wild
-before the default flips).
+**Note on P0-2 gating in the per-release plan:** the original plan gated
+the Discount increment behind the validate=True branch (added in 3.1.0).
+Under the per-release cadence, v3.0.13 lands the increment logic but it
+can't fire yet — validate=True doesn't exist in 3.0.x. This means
+v3.0.13 effectively fixes dead-code coverage (increment_usage stops
+being orphaned in source) without changing runtime behaviour for any
+caller. The behaviour change surfaces in 3.1.0, not 3.0.13. Acceptable;
+keeps semver honest.
+
+**Alternative:** merge the increment with a plain "increment on every
+checkout" (no gating) in 3.0.13 and treat it as a bug fix, not a
+behaviour change. Maintainer call — default plan above is the gated
+version for semver cleanliness.
+
+Cadence target: one patch release per PR merge, opportunistic. No hard
+calendar deadlines beyond "4.0 no sooner than October 2026".
 
 ---
 

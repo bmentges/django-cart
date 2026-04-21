@@ -108,8 +108,11 @@ Notes:
 
 ## Fixtures (catalogue)
 
-All fixtures live in `tests/conftest.py`. Pull them in by declaring them
-as arguments to your test function — pytest wires them up automatically.
+Fixtures shared across test files live in `tests/conftest.py`. Pull them
+in by declaring them as arguments to your test function — pytest wires
+them up automatically. Fixtures used by a single file may be declared at
+the top of that file; `tests/test_session_adapters.py` is the reference
+example of the local-fixture pattern.
 
 | Fixture             | Returns                                       | Depends on                        | Typical use                                              |
 | ------------------- | --------------------------------------------- | --------------------------------- | -------------------------------------------------------- |
@@ -253,8 +256,9 @@ The suite is partway through the overhaul described in `docs/ROADMAP_2026_04.md`
 §P-1. As of now:
 
 - ✅ Phase 0: scaffolding (this document, `conftest.py`,
-  `test_conftest.py`, `pyproject.toml` config) merged.
-- ⏭ Phase 1: `test_session.py` rewritten as the reference example.
+  `test_conftest.py`, `pyproject.toml` config) merged. Released v3.0.3.
+- ✅ Phase 1: `test_session.py` rewritten as `test_session_adapters.py`,
+  the reference pytest example.
 - ⏭ Phases 2–5: remaining files migrated and split.
 - ⏭ Phase 6: reflection-only tests deleted.
 - ⏭ Phase 7: behavioural coverage audit, P0 regression `xfail` tests.
