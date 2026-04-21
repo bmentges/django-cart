@@ -109,14 +109,73 @@ def test_from_serializable_with_empty_data_leaves_cart_untouched(cart, product, 
 
 
 # --------------------------------------------------------------------------- #
-# P0-1 regression (xfail removed in v3.0.11 — this commit's purpose)
+# P0-1: from_serializable restores items on a fresh cart (fixed in v3.0.11)
 # --------------------------------------------------------------------------- #
 
 def test_from_serializable_is_not_a_silent_noop_on_fresh_cart(rf_request, product):
-    """Calling from_serializable with items on a brand-new cart should
-    leave the cart populated. Today it silently returns an empty cart."""
-    data = {str(product.pk): {"quantity": 3, "unit_price": "15.00"}}
+    """Calling from_serializable with items on a brand-new cart must
+    populate it (P0-1 fix — pre-v3.0.11 this was a silent no-op)."""
+    from django.contrib.contenttypes.models import ContentType
+    from tests.test_app.models import FakeProduct
+
+    ct = ContentType.objects.get_for_model(FakeProduct)
+    data = {
+        str(product.pk): {
+            "content_type_id": ct.pk,
+            "quantity": 3,
+            "unit_price": "15.00",
+        }
+    }
 
     cart = Cart.from_serializable(rf_request, data)
 
-    assert not cart.is_empty()
+    assert cart.count() == 3
+    item = cart.cart.items.first()
+    assert item.quantity == 3
+    assert item.unit_price == Decimal("15.00")
+    assert item.object_id == product.pk
+
+
+def test_cart_serializable_includes_content_type_id(cart, product):
+    """The v3.0.11 output format includes content_type_id so payloads
+    can be fed to from_serializable on a fresh cart."""
+    from django.contrib.contenttypes.models import ContentType
+    from tests.test_app.models import FakeProduct
+
+    cart.add(product, Decimal("10.00"), quantity=1)
+
+    data = cart.cart_serializable()
+
+    ct = ContentType.objects.get_for_model(FakeProduct)
+    assert data[str(product.pk)]["content_type_id"] == ct.pk
+
+
+def test_cart_serializable_and_from_serializable_round_trip(cart, product):
+    """Serialising a populated cart and restoring into a fresh session
+    reproduces the original cart state."""
+    from django.test import RequestFactory
+
+    cart.add(product, Decimal("15.00"), quantity=3)
+    payload = cart.cart_serializable()
+
+    fresh_request = RequestFactory().get("/")
+    fresh_request.session = {}
+    restored = Cart.from_serializable(fresh_request, payload)
+
+    assert restored.count() == 3
+    item = restored.cart.items.first()
+    assert item.quantity == 3
+    assert item.unit_price == Decimal("15.00")
+    assert item.object_id == product.pk
+
+
+def test_from_serializable_raises_clear_error_on_legacy_payload(rf_request, product):
+    """Pre-v3.0.11 payloads (without content_type_id) cannot restore new
+    items; the method raises a clear ValueError instead of silently
+    no-op'ing, which was the P0-1 bug."""
+    legacy_payload = {
+        str(product.pk): {"quantity": 3, "unit_price": "15.00"},  # no content_type_id
+    }
+
+    with pytest.raises(ValueError, match="content_type_id"):
+        Cart.from_serializable(rf_request, legacy_payload)
