@@ -73,12 +73,13 @@ class Cart:
     """
 
     def __init__(self, request):
-        cart_id = request.session.get(CART_ID)
+        self._session = self._build_session_adapter(request)
+        cart_id = self._session.get_or_create_cart_id()
         cart = None
         if cart_id:
             cart = models.Cart.objects.filter(id=cart_id, checked_out=False).first()
         if cart is None:
-            cart = self._new(request)
+            cart = self._new()
         self.cart = cart
         self._cache: dict = {}
 
@@ -86,9 +87,29 @@ class Cart:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _new(self, request) -> models.Cart:
+    @staticmethod
+    def _build_session_adapter(request):
+        """Construct the session adapter named by ``CARTS_SESSION_ADAPTER_CLASS``.
+
+        Accepts either a dotted import path or a class object. If the
+        setting is unset, falls back to :class:`DjangoSessionAdapter`.
+        A bad dotted path raises ``ImportError`` — session storage is
+        too critical to silently fall back to the default (unlike the
+        tax / shipping / inventory factories).
+        """
+        from .session import DjangoSessionAdapter
+
+        adapter = getattr(settings, "CARTS_SESSION_ADAPTER_CLASS", None)
+        if adapter is None:
+            return DjangoSessionAdapter(request)
+        if isinstance(adapter, str):
+            from django.utils.module_loading import import_string
+            adapter = import_string(adapter)
+        return adapter(request)
+
+    def _new(self) -> models.Cart:
         cart = models.Cart.objects.create(creation_date=timezone.now())
-        request.session[CART_ID] = cart.id
+        self._session.set_cart_id(cart.id)
         return cart
 
     def _get_item(self, product) -> models.Item | None:

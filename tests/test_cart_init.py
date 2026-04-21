@@ -106,3 +106,42 @@ def test_carts_session_adapter_class_setting_is_honoured(settings, rf_request):
     Cart(rf_request)
 
     assert CART_ID not in rf_request.session
+
+
+def test_adapter_receives_the_new_cart_id_on_creation(settings, rf_request):
+    """The adapter's set_cart_id must be called with the freshly-created
+    cart's pk when the session had no prior cart."""
+    settings.CARTS_SESSION_ADAPTER_CLASS = (
+        "tests.test_cart_init._RecordingSessionAdapter"
+    )
+    _RecordingSessionAdapter.calls.clear()
+
+    cart = Cart(rf_request)
+
+    assert ("get_or_create_cart_id",) in _RecordingSessionAdapter.calls
+    assert ("set_cart_id", cart.cart.pk) in _RecordingSessionAdapter.calls
+
+
+def test_setting_accepts_a_class_object_not_just_a_dotted_string(
+    settings, rf_request
+):
+    """The README advertises both
+    ``CARTS_SESSION_ADAPTER_CLASS = MyAdapter`` and
+    ``= "dotted.path.MyAdapter"`` — both must work."""
+    settings.CARTS_SESSION_ADAPTER_CLASS = _RecordingSessionAdapter
+    _RecordingSessionAdapter.calls.clear()
+
+    Cart(rf_request)
+
+    assert CART_ID not in rf_request.session
+    assert ("get_or_create_cart_id",) in _RecordingSessionAdapter.calls
+
+
+def test_bad_dotted_path_raises_loudly_no_silent_fallback(settings, rf_request):
+    """Session storage is too critical to silently fall back to the
+    default on a typo — unlike the tax / shipping / inventory
+    factories. A bad dotted path must raise."""
+    settings.CARTS_SESSION_ADAPTER_CLASS = "nonexistent.module.FakeAdapter"
+
+    with pytest.raises(ImportError):
+        Cart(rf_request)
