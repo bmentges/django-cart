@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [3.1.1] — 2026-04-21
+
 ### Docs
 - README split into a **Get Started** half and an **Advanced** half
   with a visible divider in the TOC. The simple path (Installation →
