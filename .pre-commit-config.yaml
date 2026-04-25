@@ -33,4 +33,4 @@ repos:
         files: ^cart/
         additional_dependencies:
           - "django-stubs[compatible-mypy]>=5.1"
-          - "Django>=5.1,<5.2"
+          - "Django>=6.0.4,<6.1"
